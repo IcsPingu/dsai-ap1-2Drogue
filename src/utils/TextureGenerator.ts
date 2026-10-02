@@ -32,37 +32,40 @@ export class TextureGenerator {
     // 2. Enemy — Affinity (Standard Angel)
     if (!tm.exists('enemy_affinity')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
-      // White Marble / Porcelain Body
-      g.fillStyle(0xf0efe6, 1);
-      g.fillCircle(16, 16, 12);
-      // Golden Halo
-      g.lineStyle(2, 0xffd700, 1);
-      g.strokeCircle(16, 6, 6);
-      // Feathered Wings
-      g.fillStyle(0xe6e4ce, 0.9);
-      g.fillTriangle(4, 16, -4, 4, 8, 12);
-      g.fillTriangle(28, 16, 36, 4, 24, 12);
-      // Angel Face Mask
-      g.fillStyle(0xccaa44, 1);
-      g.fillRect(12, 14, 8, 4);
-      g.generateTexture('enemy_affinity', 32, 32);
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(20, 37, 30, 7);
+      g.fillStyle(0x641f32, 1);
+      g.fillRoundedRect(5, 13, 30, 25, 7);
+      g.fillTriangle(5, 17, 20, 2, 35, 17);
+      g.fillStyle(0xe5c49b, 1);
+      g.fillRect(12, 15, 16, 12);
+      g.fillStyle(0xffd35a, 1);
+      g.fillRect(14, 19, 4, 4);
+      g.fillRect(23, 19, 4, 4);
+      g.fillStyle(0x2a1520, 1);
+      g.fillRect(10, 30, 8, 9);
+      g.fillRect(23, 30, 8, 9);
+      g.generateTexture('enemy_affinity', 40, 42);
       g.destroy();
     }
 
     // 3. Enemy — Applaud (Flying Archer Angel)
     if (!tm.exists('enemy_applaud')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
-      // Divine Cyan Armor
-      g.fillStyle(0xe0f7fa, 1);
-      g.fillCircle(16, 16, 10);
-      // Seraph Wings
-      g.fillStyle(0x80deea, 0.8);
-      g.fillTriangle(2, 10, -6, -2, 10, 8);
-      g.fillTriangle(30, 10, 38, -2, 22, 8);
-      // Gold Bow/Halo
-      g.lineStyle(2, 0xffd700, 1);
-      g.strokeCircle(16, 4, 5);
-      g.generateTexture('enemy_applaud', 32, 32);
+      g.fillStyle(0x000000, 0.25);
+      g.fillEllipse(22, 39, 32, 7);
+      g.fillStyle(0x28735b, 1);
+      g.fillEllipse(22, 24, 34, 26);
+      g.fillTriangle(7, 21, 2, 8, 15, 16);
+      g.fillTriangle(37, 21, 42, 8, 29, 16);
+      g.fillStyle(0xa9d18e, 1);
+      g.fillCircle(22, 18, 11);
+      g.fillStyle(0x421d4d, 1);
+      g.fillRect(14, 12, 16, 7);
+      g.fillStyle(0xffef8a, 1);
+      g.fillRect(17, 15, 4, 3);
+      g.fillRect(25, 15, 4, 3);
+      g.generateTexture('enemy_applaud', 44, 44);
       g.destroy();
     }
 
@@ -113,6 +116,77 @@ export class TextureGenerator {
       g.destroy();
     }
 
+    if (!tm.exists('proj_magic_orb')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x38206f, 0.45);
+      g.fillCircle(14, 14, 13);
+      g.fillStyle(0x4e9be8, 0.7);
+      g.fillCircle(14, 14, 10);
+      g.fillStyle(0x67e8ff, 1);
+      g.fillCircle(14, 14, 7);
+      g.fillStyle(0xe9fdff, 1);
+      g.fillCircle(12, 11, 3);
+      g.fillRect(2, 13, 5, 2);
+      g.fillRect(21, 13, 5, 2);
+      g.fillRect(13, 2, 2, 5);
+      g.fillRect(13, 21, 2, 5);
+      g.generateTexture('proj_magic_orb', 28, 28);
+      g.destroy();
+    }
+
+    if (!tm.exists('proj_magic_bolt')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x38206f, 0.35);
+      g.fillRoundedRect(0, 1, 44, 8, 4);
+      g.fillStyle(0x67e8ff, 0.85);
+      g.fillTriangle(4, 2, 48, 5, 4, 8);
+      g.fillStyle(0xe9fdff, 1);
+      g.fillTriangle(12, 4, 48, 5, 12, 6);
+      g.generateTexture('proj_magic_bolt', 48, 10);
+      g.destroy();
+    }
+
+    if (!tm.exists('proj_ranger_arrow')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x80502c, 1);
+      g.fillRect(4, 5, 27, 3);
+      g.fillStyle(0xe9edf0, 1);
+      g.fillTriangle(31, 2, 39, 6, 31, 11);
+      g.fillStyle(0xb7d86b, 1);
+      g.fillTriangle(8, 6, 0, 1, 3, 6);
+      g.fillTriangle(8, 7, 0, 12, 3, 7);
+      g.generateTexture('proj_ranger_arrow', 40, 13);
+      g.destroy();
+    }
+
+    if (!tm.exists('proj_rogue_dagger')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xdfe6f5, 1);
+      g.fillTriangle(4, 3, 24, 7, 4, 11);
+      g.fillStyle(0xffffff, 1);
+      g.fillTriangle(5, 4, 20, 7, 5, 7);
+      g.fillStyle(0xe84f75, 1);
+      g.fillRect(2, 3, 4, 8);
+      g.fillStyle(0x6b3d2a, 1);
+      g.fillRect(0, 5, 4, 4);
+      g.generateTexture('proj_rogue_dagger', 25, 14);
+      g.destroy();
+    }
+
+    if (!tm.exists('proj_sword_wave')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.lineStyle(6, 0xf8e7a4, 0.95);
+      g.beginPath();
+      g.arc(4, 18, 16, -1.1, 1.1, false);
+      g.strokePath();
+      g.lineStyle(2, 0xffffff, 0.9);
+      g.beginPath();
+      g.arc(5, 18, 11, -1.05, 1.05, false);
+      g.strokePath();
+      g.generateTexture('proj_sword_wave', 25, 36);
+      g.destroy();
+    }
+
     // 7. Projectile — Wicked Weave Fist
     if (!tm.exists('fx_wicked_fist')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
@@ -131,25 +205,31 @@ export class TextureGenerator {
     // 8. Map Tiles — Wall, Floor, Pillar, Water, Lava, Door, Chest, Stairs
     if (!tm.exists('tile_floor')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
-      g.fillStyle(0x2a1a3a, 1);
+      g.fillStyle(0x5a3f45, 1);
       g.fillRect(0, 0, 32, 32);
-      g.lineStyle(1, 0x3d2752, 1);
+      g.fillStyle(0x674b4d, 1);
+      g.fillRect(2, 2, 28, 28);
+      g.lineStyle(1, 0x80605b, 1);
       g.strokeRect(0, 0, 32, 32);
-      g.lineStyle(1, 0x1f122c, 1);
-      g.lineBetween(0, 0, 32, 32);
+      g.lineStyle(1, 0x493238, 1);
+      g.lineBetween(4, 26, 12, 18);
       g.generateTexture('tile_floor', 32, 32);
       g.destroy();
     }
 
     if (!tm.exists('tile_wall')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
-      g.fillStyle(0x150b21, 1);
+      g.fillStyle(0x170f1b, 1);
       g.fillRect(0, 0, 32, 32);
-      g.fillStyle(0x2d1a40, 1);
-      g.fillRect(2, 2, 28, 12);
-      g.fillRect(2, 16, 12, 14);
-      g.fillRect(16, 16, 14, 14);
-      g.lineStyle(1, 0x4a2a68, 1);
+      g.fillStyle(0x3b2938, 1);
+      g.fillRect(1, 1, 30, 25);
+      g.fillStyle(0x523849, 1);
+      g.fillRect(3, 3, 26, 8);
+      g.fillRect(3, 14, 12, 9);
+      g.fillRect(18, 14, 11, 9);
+      g.fillStyle(0x0b080d, 1);
+      g.fillRect(0, 27, 32, 5);
+      g.lineStyle(1, 0x765469, 1);
       g.strokeRect(0, 0, 32, 32);
       g.generateTexture('tile_wall', 32, 32);
       g.destroy();
@@ -157,10 +237,17 @@ export class TextureGenerator {
 
     if (!tm.exists('tile_pillar')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
-      g.fillStyle(0x4a3b5c, 1);
-      g.fillCircle(16, 16, 14);
-      g.fillStyle(0xd4af37, 1);
-      g.fillCircle(16, 16, 8);
+      g.fillStyle(0x201720, 1);
+      g.fillRect(2, 5, 28, 25);
+      g.fillStyle(0x75606b, 1);
+      g.fillRect(4, 2, 24, 24);
+      g.fillStyle(0x9a7e76, 1);
+      g.fillRect(7, 5, 18, 5);
+      g.fillStyle(0xd7a43b, 1);
+      g.fillRect(7, 15, 5, 5);
+      g.fillRect(20, 15, 5, 5);
+      g.lineStyle(2, 0x33242e, 1);
+      g.strokeRect(4, 2, 24, 24);
       g.generateTexture('tile_pillar', 32, 32);
       g.destroy();
     }
@@ -189,10 +276,12 @@ export class TextureGenerator {
       const g = scene.make.graphics({ x: 0, y: 0 });
       g.fillStyle(0x1a0f2b, 1);
       g.fillRect(0, 0, 32, 32);
-      g.fillStyle(0xd4af37, 1);
-      g.fillRect(4, 4, 24, 4);
-      g.fillRect(8, 12, 16, 4);
-      g.fillRect(12, 20, 8, 4);
+      g.fillStyle(0x3a154d, 1);
+      g.fillCircle(16, 16, 14);
+      g.lineStyle(3, 0xf6d77a, 1);
+      g.strokeCircle(16, 16, 11);
+      g.lineStyle(2, 0xc06cff, 1);
+      g.strokeCircle(16, 16, 6);
       g.generateTexture('tile_stairs', 32, 32);
       g.destroy();
     }

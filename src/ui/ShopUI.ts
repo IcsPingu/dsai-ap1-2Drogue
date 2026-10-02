@@ -3,9 +3,8 @@
 // Allows buying new weapons, accessories, lollipops, and witch heart upgrades using Halos.
 
 import Phaser from 'phaser';
-import { WEAPON_DATABASE, WeaponDefinition } from '../data/WeaponDatabase';
-import { ITEM_DATABASE, ItemDefinition } from '../data/ItemDatabase';
-import { Player } from '../entities/Player';
+import { ITEM_DATABASE } from '../data/ItemDatabase';
+import { Player } from '../entities/Hero';
 
 export class ShopUI {
   private scene: Phaser.Scene;
@@ -80,31 +79,9 @@ export class ShopUI {
   private renderShopItems(width: number, height: number): void {
     let startY = height / 2 - 140;
     const itemKeys = ['green_lollipop', 'purple_lollipop', 'yellow_lollipop', 'moon_mahaa_kalaa', 'evil_harvest_rosary'];
-    const weaponKeys = ['shuraba', 'kulshedra', 'durga', 'kilgore'];
 
     // Combine weapons and items
     const shopList: { name: string; price: number; desc: string; buyFn: () => void }[] = [];
-
-    weaponKeys.forEach(wKey => {
-      const w = WEAPON_DATABASE[wKey];
-      if (w) {
-        shopList.push({
-          name: `Weapon: ${w.name}`,
-          price: w.price,
-          desc: w.description,
-          buyFn: () => {
-            if (this.player.halos >= w.price) {
-              this.player.halos -= w.price;
-              this.player.equippedWeapon = w;
-              this.updateHaloCount();
-              alert(`Purchased weapon: ${w.name}!`);
-            } else {
-              alert("Not enough Halos!");
-            }
-          }
-        });
-      }
-    });
 
     itemKeys.forEach(iKey => {
       const item = ITEM_DATABASE[iKey];
@@ -164,7 +141,11 @@ export class ShopUI {
     this.isOpen = show !== undefined ? show : !this.isOpen;
     this.container.setVisible(this.isOpen);
     if (this.isOpen) {
+      this.player.setVelocity(0, 0);
+      this.scene.physics.world.pause();
       this.updateHaloCount();
+    } else {
+      this.scene.physics.world.resume();
     }
   }
 

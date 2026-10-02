@@ -1,6 +1,8 @@
 // src/scenes/BootScene.ts
 import Phaser from 'phaser';
-import { GameScene } from './GameScene';
+import { TextureGenerator } from '../utils/TextureGenerator';
+import { loadSettings } from '../data/PlayerProfile';
+import { SoundManager } from '../managers/SoundManager';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,11 +10,83 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // No external assets for the demo
+    const classSprites = [
+      'knight_man', 'knight_woman',
+      'mage_man', 'mage_woman',
+      'ranger_man', 'ranger_woman',
+      'rogue_man', 'rogue_woman',
+    ];
+    classSprites.forEach(sprite => {
+      this.load.image(`class_${sprite}`, new URL(`../assets/classes/${sprite}.png`, import.meta.url).href);
+      this.load.spritesheet(`anim_${sprite}`, new URL(`../assets/animations/${sprite}.png`, import.meta.url).href, {
+        frameWidth: 128,
+        frameHeight: 114,
+      });
+    });
+    ['enemy_melee', 'enemy_ranged', 'boss_guardian'].forEach(enemy => {
+      this.load.spritesheet(`${enemy}_anim`, new URL(`../assets/animations/${enemy}.png`, import.meta.url).href, {
+        frameWidth: 128,
+        frameHeight: 114,
+      });
+    });
   }
 
   create() {
-    // Directly start the main gameplay scene
-    this.scene.start('GameScene');
+    TextureGenerator.generateAllTextures(this);
+    const playerSprites = [
+      'anim_knight_man', 'anim_knight_woman',
+      'anim_mage_man', 'anim_mage_woman',
+      'anim_ranger_man', 'anim_ranger_woman',
+      'anim_rogue_man', 'anim_rogue_woman',
+    ];
+    playerSprites.forEach(key => {
+      this.anims.create({
+        key: `${key}_walk`,
+        frames: [0, 1, 2, 3, 2, 1].map(frame => ({ key, frame })),
+        frameRate: 10,
+        repeat: -1,
+      });
+      this.anims.create({
+        key: `${key}_attack`,
+        frames: this.anims.generateFrameNumbers(key, { start: 4, end: 7 }),
+        frameRate: 11,
+        repeat: 0,
+      });
+      this.anims.create({
+        key: `${key}_hurt`,
+        frames: this.anims.generateFrameNumbers(key, { start: 8, end: 11 }),
+        frameRate: 10,
+        repeat: 0,
+      });
+      this.anims.create({
+        key: `${key}_dodge`,
+        frames: [0, 1, 2, 3].map(frame => ({ key, frame })),
+        frameRate: 16,
+        repeat: 0,
+      });
+    });
+
+    ['enemy_melee_anim', 'enemy_ranged_anim', 'boss_guardian_anim'].forEach(key => {
+      this.anims.create({
+        key: `${key}_walk`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }),
+        frameRate: 8,
+        repeat: -1,
+      });
+      this.anims.create({
+        key: `${key}_attack`,
+        frames: this.anims.generateFrameNumbers(key, { start: 4, end: 7 }),
+        frameRate: 11,
+        repeat: 0,
+      });
+      this.anims.create({
+        key: `${key}_hurt`,
+        frames: this.anims.generateFrameNumbers(key, { start: 8, end: 11 }),
+        frameRate: 10,
+        repeat: 0,
+      });
+    });
+    SoundManager.setEnabled(loadSettings().sound);
+    this.scene.start('MenuScene');
   }
 }

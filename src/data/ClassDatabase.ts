@@ -13,6 +13,7 @@ export interface PlayerClassDefinition {
   specialDescription: string;
   primaryStyle: PrimaryStyle;
   specialStyle: SpecialStyle;
+  spriteFacing: 'left' | 'right';
   maxHp: number;
   maxMagic: number;
   speed: number;
@@ -38,6 +39,7 @@ export const CLASS_DATABASE: Record<PlayerClassId, PlayerClassDefinition> = {
     specialDescription: 'Dispara lâminas ao redor e bloqueia os próximos 2 golpes.',
     primaryStyle: 'melee',
     specialStyle: 'aegis',
+    spriteFacing: 'left',
     maxHp: 6,
     maxMagic: 100,
     speed: 205,
@@ -59,13 +61,14 @@ export const CLASS_DATABASE: Record<PlayerClassId, PlayerClassDefinition> = {
     specialDescription: 'Libera 16 rajadas arcanas em todas as direções.',
     primaryStyle: 'orb',
     specialStyle: 'nova',
+    spriteFacing: 'left',
     maxHp: 4,
     maxMagic: 140,
     speed: 215,
     baseDamage: 30,
     attackRange: 360,
     attackCooldown: 330,
-    projectileSpeed: 350,
+    projectileSpeed: 560,
     magicCost: 40,
     color: 0x6c3da3,
     accentColor: 0x62e1ff,
@@ -80,9 +83,10 @@ export const CLASS_DATABASE: Record<PlayerClassId, PlayerClassDefinition> = {
     specialDescription: 'Dispara sete flechas que atravessam múltiplos inimigos.',
     primaryStyle: 'arrow',
     specialStyle: 'volley',
+    spriteFacing: 'right',
     maxHp: 5,
     maxMagic: 110,
-    speed: 230,
+    speed: 215,
     baseDamage: 34,
     attackRange: 460,
     attackCooldown: 390,
@@ -101,6 +105,7 @@ export const CLASS_DATABASE: Record<PlayerClassId, PlayerClassDefinition> = {
     specialDescription: 'Fica intangível e lança adagas em todas as direções.',
     primaryStyle: 'daggers',
     specialStyle: 'shadow',
+    spriteFacing: 'left',
     maxHp: 4,
     maxMagic: 100,
     speed: 265,

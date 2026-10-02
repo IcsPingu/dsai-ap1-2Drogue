@@ -90,7 +90,7 @@ test('archer aim follows current camera coordinates even when the mouse does not
     worldX: 999, worldY: 999,
     updateWorldPoint: jest.fn(function (this: { worldX: number; worldY: number }, currentCamera: typeof camera) {
       this.worldX = 200 + currentCamera.scrollX;
-      this.worldY = 87 + currentCamera.scrollY;
+      this.worldY = 89 + currentCamera.scrollY;
     }),
   } as unknown as Parameters<Player['aimAtPointer']>[0];
   const player = Object.create(Player.prototype) as Player;
@@ -136,19 +136,61 @@ test.each([Math.PI / 2, -Math.PI / 2, Math.PI / 4, -3 * Math.PI / 4])(
     });
     expect(player['updateBowChargePose']()).toBe(true);
     expect(player.setTexture).toHaveBeenCalledWith('archer_body', undefined);
-    expect(bow.setPose).toHaveBeenLastCalledWith(1, angle);
+    expect(bow.setPose).toHaveBeenLastCalledWith(1, angle, 0.5);
     expect(bow.sync).toHaveBeenCalledWith(100, 100, 0.67, 0.67, player.flipX, 1);
     expect(player.rotation).toBe(0);
 
     player['chargeStartedAt'] = null;
     player['playSpriteAction']('attack');
-    expect(bow.setPose).toHaveBeenLastCalledWith(2, angle);
+    expect(bow.setPose).toHaveBeenLastCalledWith(2, angle, 0);
     expect(player.rotation).toBe(0);
     time.now = 800;
-    expect(player['updateBowChargePose']()).toBe(false);
-    expect(bow.hide).toHaveBeenCalled();
+    expect(player['updateBowChargePose']()).toBe(true);
+    expect(bow.setPose).toHaveBeenLastCalledWith(0, angle, 0);
+    expect(bow.hide).not.toHaveBeenCalled();
   },
 );
+
+test('archer keeps the same body, scale and position from movement through charge, release and idle', () => {
+  const time = { now: 0 };
+  const bow = { bodyKey: 'archer_body', setPose: jest.fn(), sync: jest.fn(), hide: jest.fn() };
+  const setTexture = jest.fn();
+  const setScale = jest.fn();
+  const setVelocity = jest.fn();
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    x: 100, y: 100, active: true, body: {}, alpha: 1, rotation: 0,
+    combatInputEnabled: true, heroClass: CLASS_DATABASE.ranger, speed: CLASS_DATABASE.ranger.speed,
+    attackCooldown: 0, dodgeCooldown: 0, footstepEffectCooldown: 10000,
+    comboSequence: [], chargeStartedAt: null, bowReleaseUntil: 0,
+    animationLocked: false, animationToken: 0, archerBow: bow,
+    baseScaleX: 86 / 128, baseScaleY: 76 / 114, facingX: 1, facingY: 0,
+    keyD: { isDown: true }, stop: jest.fn(), play: jest.fn(), setTexture,
+    setScale: (x: number, y: number) => { setScale(x, y); player.scaleX = x; player.scaleY = y; },
+    setVelocity, setFlipX: (flip: boolean) => { player.flipX = flip; },
+    scene: { time, cameras: { main: {} }, input: {
+      activePointer: { worldX: 300, worldY: 100, updateWorldPoint: jest.fn() },
+    } },
+  });
+  player.updatePlayer(0, 16);
+  expect(setVelocity).toHaveBeenLastCalledWith(CLASS_DATABASE.ranger.speed, 0);
+  player['chargeStartedAt'] = 0;
+  time.now = 550;
+  player.updatePlayer(550, 16);
+  expect(player.getChargeRatio()).toBe(0.5);
+  player['chargeStartedAt'] = null;
+  player['playSpriteAction']('attack');
+  time.now = 800;
+  Object.assign(player, { keyD: { isDown: false } });
+  player.updatePlayer(800, 16);
+  expect(setVelocity).toHaveBeenLastCalledWith(0, 0);
+  expect(setTexture.mock.calls).toHaveLength(4);
+  expect(setTexture.mock.calls.every(([key, frame]) => key === 'archer_body' && frame === undefined)).toBe(true);
+  expect(setScale.mock.calls.every(([x, y]) => x === 86 / 128 && y === 76 / 114)).toBe(true);
+  expect(player.play).not.toHaveBeenCalled();
+  expect({ x: player.x, y: player.y }).toEqual({ x: 100, y: 100 });
+  expect(player.rotation).toBe(0);
+});
 
 test('charged arrows launch together with the release animation, without another draw delay', () => {
   jest.spyOn(SoundManager, 'playGunshot').mockImplementation(() => {});

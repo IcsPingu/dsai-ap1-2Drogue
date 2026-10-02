@@ -1,97 +1,165 @@
-import type Phaser from 'phaser';
+export const ARCHER_AIM_PIVOT = { x: 64, y: 46 };
 
-export const ARCHER_AIM_PIVOT = { x: 64, y: 44 };
+export interface BowPoint { x: number; y: number }
+export interface BowArm { shoulder: BowPoint; elbow: BowPoint; hand: BowPoint }
 
-/** Split the existing draw poses into an upright body and independently aimed arms/bow. */
-export function createArcherAimTextures(scene: Phaser.Scene, sourceKey: string) {
-  const bodyKey = `${sourceKey}_aim_body`;
-  const bowKey = `${sourceKey}_aim_bow`;
-  if (scene.textures.exists(bodyKey) && scene.textures.exists(bowKey)) return { bodyKey, bowKey };
-  const woman = sourceKey.endsWith('_woman');
-  const canvas = (width = 128) => {
-    const result = document.createElement('canvas');
-    result.width = width;
-    result.height = 114;
-    return result;
-  };
-  const sheet = canvas(384);
-  const body = canvas();
-  [4, 5, 6].forEach((frameNumber, index) => {
-    const frame = scene.textures.getFrame(sourceKey, frameNumber);
-    const source = canvas();
-    source.getContext('2d')!.drawImage(frame.source.image as CanvasImageSource,
-      frame.cutX, frame.cutY, 128, 114, 0, 0, 128, 114);
-    const ready = frameNumber !== 4;
-    const outline = woman
-      ? ready
-        ? [[34, 35], [51, 34], [69, 39], [90, 42], [99, 33], [91, 0], [128, 0],
-          [128, 105], [90, 105], [90, 73], [79, 60], [59, 53], [37, 49]]
-        : [[37, 38], [55, 38], [76, 46], [96, 50], [104, 34], [97, 0], [128, 0],
-          [128, 105], [92, 105], [91, 78], [77, 65], [56, 56], [37, 52]]
-      : ready
-        ? [[37, 34], [56, 33], [76, 40], [96, 42], [97, 32], [82, 0], [128, 0],
-          [128, 101], [94, 101], [94, 75], [77, 58], [57, 51], [36, 46]]
-        : [[40, 39], [58, 39], [78, 44], [99, 46], [103, 30], [85, 0], [128, 0],
-          [128, 102], [94, 102], [94, 74], [77, 63], [57, 56], [38, 51]];
-    const mask = new Path2D();
-    outline.forEach(([x, y], point) => point === 0 ? mask.moveTo(x, y) : mask.lineTo(x, y));
-    mask.closePath();
-    const context = sheet.getContext('2d')!;
-    context.save();
-    context.translate(index * 128, 0);
-    context.clip(mask);
-    context.drawImage(source, 0, 0);
-    context.restore();
-    if (frameNumber === 5) {
-      const bodyContext = body.getContext('2d')!;
-      bodyContext.drawImage(source, 0, 0);
-      bodyContext.globalCompositeOperation = 'destination-out';
-      bodyContext.fill(mask);
-      bodyContext.globalCompositeOperation = 'source-over';
-      // Restore the tunic behind the arms; the original sheet has no hidden-body layer.
-      bodyContext.save();
-      bodyContext.clip(mask);
-      bodyContext.imageSmoothingEnabled = false;
-      const tunic = new Path2D();
-      tunic.moveTo(49, 36); tunic.lineTo(62, 35); tunic.lineTo(74, 44);
-      tunic.lineTo(78, 52); tunic.lineTo(69, 65); tunic.lineTo(54, 65);
-      tunic.lineTo(39, 46); tunic.closePath();
-      bodyContext.fillStyle = '#1d382c';
-      bodyContext.fill(tunic);
-      const panel = new Path2D();
-      panel.moveTo(51, 38); panel.lineTo(61, 38); panel.lineTo(72, 47);
-      panel.lineTo(65, 61); panel.lineTo(53, 55); panel.closePath();
-      bodyContext.fillStyle = '#38523a';
-      bodyContext.fill(panel);
-      bodyContext.strokeStyle = '#ad9154';
-      bodyContext.lineWidth = 1;
-      bodyContext.beginPath();
-      bodyContext.moveTo(49, 37); bodyContext.lineTo(62, 45); bodyContext.lineTo(71, 44);
-      bodyContext.moveTo(45, 46); bodyContext.lineTo(68, 61);
-      bodyContext.stroke();
-      bodyContext.restore();
-    }
-  });
-  scene.textures.addCanvas(bodyKey, body);
-  const bow = scene.textures.addCanvas(bowKey, sheet);
-  if (!bow) throw new Error(`Unable to create archer aiming texture: ${bowKey}`);
-  [0, 1, 2].forEach(index => bow.add(index, 0, index * 128, 0, 128, 114));
-  return { bodyKey, bowKey };
+export function getArcherBodyTextureKey(sourceKey: string): string {
+  return `${sourceKey}_aim_body`;
 }
 
-export function getArcherAimOrigin(x: number, y: number, scaleY: number) {
+export function getArcherAimOrigin(x: number, y: number, scaleY: number): BowPoint {
   return { x, y: y + (ARCHER_AIM_PIVOT.y - 57) * scaleY };
 }
 
-/** Position a center-origin bow image around the shoulder, independently of body rotation. */
-export function getArcherBowTransform(x: number, y: number, scaleX: number, scaleY: number,
-  aimAngle: number, flipX: boolean) {
-  const rotation = aimAngle - (flipX ? Math.PI : 0);
-  const offsetX = (64 - ARCHER_AIM_PIVOT.x) * scaleX * (flipX ? -1 : 1);
-  const offsetY = (57 - ARCHER_AIM_PIVOT.y) * scaleY;
+/** Two rigid arm segments joined at an elbow, never a rotated strip of the torso. */
+function solveArm(shoulder: BowPoint, hand: BowPoint, bend: number): BowArm {
+  const upper = 13;
+  const lower = 14;
+  const dx = hand.x - shoulder.x;
+  const dy = hand.y - shoulder.y;
+  const distance = Math.max(0.001, Math.hypot(dx, dy));
+  const reach = Math.min(upper + lower - 0.001, Math.max(Math.abs(upper - lower) + 0.001, distance));
+  const along = (upper * upper - lower * lower + reach * reach) / (2 * reach);
+  const across = Math.sqrt(Math.max(0, upper * upper - along * along)) * bend;
   return {
-    x: x + Math.cos(rotation) * offsetX - Math.sin(rotation) * offsetY,
-    y: y + (ARCHER_AIM_PIVOT.y - 57) * scaleY + Math.sin(rotation) * offsetX + Math.cos(rotation) * offsetY,
-    rotation,
+    shoulder,
+    elbow: {
+      x: shoulder.x + (dx * along - dy * across) / distance,
+      y: shoulder.y + (dy * along + dx * across) / distance,
+    },
+    hand,
   };
+}
+
+export function getArcherBowPose(angle: number, charge: number, flipX: boolean, releasing = false) {
+  const pull = releasing ? 0 : Math.max(0, Math.min(1, charge));
+  const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+  const point = (forward: number, side: number): BowPoint => ({
+    x: direction.x * forward - direction.y * side,
+    y: direction.y * forward + direction.x * side,
+  });
+  const side = flipX ? -1 : 1;
+  // Keep the supporting arm almost straight at every angle. Its reach is
+  // measured from the shoulder, not from the middle of the chest.
+  const shoulderProjection = direction.x * side * 10;
+  const gripDistance = shoulderProjection + Math.sqrt(25 * 25 - 10 * 10 + shoulderProjection ** 2);
+  const grip = point(gripDistance, 0);
+  const nock = point(12 - pull * 16, 0);
+  return {
+    point, grip, nock, pull, gripDistance,
+    holdingArm: solveArm({ x: side * 10, y: 0 }, grip, side),
+    drawingArm: solveArm({ x: -side * 10, y: 0 }, nock, -side),
+    tips: [point(gripDistance - 6 - pull * 2, -23), point(gripDistance - 6 - pull * 2, 23)],
+    showArrow: !releasing,
+  };
+}
+
+/** Draw only the weapon and articulated arms. The body is a separate, untouched asset. */
+export function drawArcherBow(context: CanvasRenderingContext2D, angle: number,
+  charge: number, flipX: boolean, releasing: boolean): void {
+  const pose = getArcherBowPose(angle, charge, flipX, releasing);
+  context.clearRect(0, 0, 128, 114);
+  context.save();
+  context.translate(ARCHER_AIM_PIVOT.x, ARCHER_AIM_PIVOT.y);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  const line = (points: BowPoint[], color: string, width: number) => {
+    context.strokeStyle = color;
+    context.lineWidth = width;
+    context.beginPath();
+    points.forEach((p, i) => i === 0
+      ? context.moveTo(Math.round(p.x), Math.round(p.y))
+      : context.lineTo(Math.round(p.x), Math.round(p.y)));
+    context.stroke();
+  };
+  // Rasterize silhouettes on the sprite's pixel grid. Tapered shapes and
+  // separate cloth/skin/bracer palettes read as limbs instead of wooden rods.
+  const polygon = (points: BowPoint[], color: string) => {
+    context.fillStyle = color;
+    const top = Math.floor(Math.min(...points.map(p => p.y)));
+    const bottom = Math.ceil(Math.max(...points.map(p => p.y)));
+    for (let y = top; y < bottom; y++) {
+      const intersections: number[] = [];
+      points.forEach((a, i) => {
+        const b = points[(i + 1) % points.length];
+        if ((a.y <= y + 0.5 && b.y > y + 0.5) || (b.y <= y + 0.5 && a.y > y + 0.5)) {
+          intersections.push(a.x + (y + 0.5 - a.y) * (b.x - a.x) / (b.y - a.y));
+        }
+      });
+      intersections.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < intersections.length; i += 2) {
+        const left = Math.round(intersections[i]);
+        context.fillRect(left, y, Math.round(intersections[i + 1]) - left, 1);
+      }
+    }
+  };
+  const lerp = (a: BowPoint, b: BowPoint, t: number): BowPoint => ({
+    x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+  });
+  const segment = (a: BowPoint, b: BowPoint, startWidth: number, endWidth: number,
+    color: string, offset = 0) => {
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = -(b.y - a.y) / length;
+    const ny = (b.x - a.x) / length;
+    const edge = (p: BowPoint, width: number) => ({ x: p.x + nx * width, y: p.y + ny * width });
+    polygon([edge(a, offset - startWidth / 2), edge(b, offset - endWidth / 2),
+      edge(b, offset + endWidth / 2), edge(a, offset + startWidth / 2)], color);
+  };
+  const arm = ({ shoulder, elbow, hand }: BowArm) => {
+    const sleeveEnd = lerp(shoulder, elbow, 0.65);
+    const bracerStart = lerp(elbow, hand, 0.35);
+    const wrist = lerp(elbow, hand, 0.85);
+    segment(shoulder, elbow, 9, 7, '#2a2325');
+    segment(elbow, hand, 7, 5, '#2a2325');
+    segment(shoulder, elbow, 7, 5, '#cf936b');
+    segment(elbow, hand, 5, 3, '#dba67b');
+    segment(sleeveEnd, elbow, 3, 3, '#f0c79b', -1);
+    segment(elbow, bracerStart, 3, 2, '#f0c79b', -1);
+    // A broad, shaded linen sleeve overlaps the matching shoulder on the body.
+    segment(shoulder, sleeveEnd, 9, 8, '#625b44');
+    segment(shoulder, sleeveEnd, 7, 6, '#c7c29c', -0.5);
+    segment(shoulder, sleeveEnd, 3, 3, '#f3ebca', -2);
+    segment(lerp(shoulder, sleeveEnd, 0.82), sleeveEnd, 8, 8, '#9d8750');
+    segment(bracerStart, wrist, 6, 5, '#25382a');
+    segment(bracerStart, wrist, 4, 3, '#536d3b', -0.5);
+    segment(bracerStart, wrist, 1, 1, '#87914a', -1.5);
+    segment(lerp(bracerStart, wrist, 0.8), wrist, 6, 5, '#c3a160');
+  };
+  const hand = (limb: BowArm) => {
+    const wrist = lerp(limb.elbow, limb.hand, 0.88);
+    const knuckles = lerp(limb.elbow, limb.hand, 1.15);
+    segment(wrist, knuckles, 6, 5, '#51362c');
+    segment(wrist, knuckles, 4, 3, '#e1ad80', -0.5);
+    segment(wrist, limb.hand, 2, 2, '#ffe0ac', -1);
+    // Thumb curls across the grip/string; knuckles remain in front of the bow.
+    const x = Math.round(limb.hand.x), y = Math.round(limb.hand.y);
+    context.fillStyle = '#f4c592';
+    context.fillRect(x - 2, y, 3, 2);
+  };
+  arm(pose.drawingArm);
+  arm(pose.holdingArm);
+  const bow = [pose.tips[0], pose.point(pose.gripDistance + 1, -18), pose.point(pose.gripDistance + 4, -9), pose.grip,
+    pose.point(pose.gripDistance + 4, 9), pose.point(pose.gripDistance + 1, 18), pose.tips[1]];
+  line(bow, '#21160f', 5);
+  line(bow, '#865427', 3);
+  line(bow, '#d2ab61', 1);
+  line([pose.tips[0], pose.nock, pose.tips[1]], '#e6dbb4', 1);
+  // Small green bindings and gold accents echo the authored ranger weapon.
+  [-15, 15].forEach(side => {
+    const p = pose.point(pose.gripDistance + 2, side);
+    context.fillStyle = '#3d7436';
+    context.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 2, 4, 4);
+    context.fillStyle = '#d7bd72';
+    context.fillRect(Math.round(p.x), Math.round(p.y), 1, 2);
+  });
+  if (pose.showArrow) {
+    const tail = 12 - pose.pull * 16;
+    line([pose.point(tail, 0), pose.point(tail + 45, 0)], '#20180f', 3);
+    line([pose.point(tail, 0), pose.point(tail + 45, 0)], '#c7ae71', 1);
+    line([pose.point(tail + 41, -2), pose.point(tail + 46, 0), pose.point(tail + 41, 2)], '#ebeedc', 1);
+    line([pose.point(tail + 4, -2), pose.point(tail, 0), pose.point(tail + 4, 2)], '#cddfaf', 2);
+  }
+  hand(pose.holdingArm);
+  hand(pose.drawingArm);
+  context.restore();
 }

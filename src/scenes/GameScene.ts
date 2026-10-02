@@ -50,6 +50,7 @@ export class GameScene extends Phaser.Scene {
   private levelBannerText!: Phaser.GameObjects.Text;
   private witchTimeOverlay!: Phaser.GameObjects.Rectangle;
   private aimReticle!: Phaser.GameObjects.Arc;
+  private arrowChargeBar!: Phaser.GameObjects.Graphics;
 
   private levelClearedBannerShowing: boolean = false;
   private controlsGuideOpen: boolean = false;
@@ -136,6 +137,7 @@ export class GameScene extends Phaser.Scene {
     this.comboManager = new ComboManager(this, this.comboHudText);
     this.showChapterTitle(this.currentLevel.name);
     this.createAimReticle();
+    this.arrowChargeBar = this.add.graphics().setDepth(30).setVisible(false);
     if (loadSettings().showControls && !this.skipControlsGuide) this.showControlsGuide();
   }
 
@@ -436,6 +438,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   public override update(time: number, delta: number): void {
+    // Early returns for menus, death and transitions must also hide the charge UI.
+    this.arrowChargeBar.setVisible(false);
     this.comboManager.update();
     // Damage cooldown tick
     if (this.playerDamageCooldown > 0) {
@@ -510,6 +514,24 @@ export class GameScene extends Phaser.Scene {
     this.aimReticle.setScale(1 + charge * 0.9);
     this.aimReticle.setStrokeStyle(2 + charge * 3, charge >= 1 ? 0xffffff : this.player.heroClass.accentColor, 0.9);
     this.aimReticle.setPosition(this.input.activePointer.x, this.input.activePointer.y);
+    this.updateArrowChargeBar();
+  }
+
+  private updateArrowChargeBar(): void {
+    if (this.player.heroClass.primaryStyle !== 'arrow' || !this.player.isChargingAttack()) return;
+    const charge = this.player.getChargeRatio();
+    const width = 48;
+    const height = 6;
+    // World coordinates keep the meter attached to the archer as the camera moves.
+    this.arrowChargeBar.clear()
+      .setPosition(this.player.x, this.player.y - this.player.displayHeight / 2 - 12)
+      .setVisible(true);
+    this.arrowChargeBar.fillStyle(0x100b18, 0.95);
+    this.arrowChargeBar.fillRect(-width / 2 - 2, -2, width + 4, height + 4);
+    this.arrowChargeBar.fillStyle(0x3a3344, 1);
+    this.arrowChargeBar.fillRect(-width / 2, 0, width, height);
+    this.arrowChargeBar.fillStyle(charge >= 1 ? 0xf6d77a : 0x8bdc75, 1);
+    this.arrowChargeBar.fillRect(-width / 2, 0, width * charge, height);
   }
 
   private createAimReticle(): void {

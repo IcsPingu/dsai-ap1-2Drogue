@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { TextureGenerator } from '../utils/TextureGenerator';
 import { loadSettings } from '../data/PlayerProfile';
 import { SoundManager } from '../managers/SoundManager';
+import { createMageCastTexture } from '../utils/MageCastTexture';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -46,10 +47,14 @@ export class BootScene extends Phaser.Scene {
         frameRate: 10,
         repeat: -1,
       });
+      const mage = key.startsWith('anim_mage_');
+      const archer = key.startsWith('anim_ranger_');
+      const attackTexture = mage ? createMageCastTexture(this, key) : key;
       this.anims.create({
         key: `${key}_attack`,
-        frames: this.anims.generateFrameNumbers(key, { start: 4, end: 7 }),
-        frameRate: 11,
+        // Archer frames 4–5 are driven by the held charge; 6–7 release the arrow.
+        frames: this.anims.generateFrameNumbers(attackTexture, { start: mage ? 0 : archer ? 6 : 4, end: mage ? 3 : 7 }),
+        frameRate: mage ? 24 : 11,
         repeat: 0,
       });
       this.anims.create({

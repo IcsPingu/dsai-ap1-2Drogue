@@ -50,3 +50,7 @@ test('every playable class has its own weapon, special and valid combat stats', 
     expect(heroClass.attackCooldown).toBeGreaterThan(0);
   });
 });
+
+test('archer movement speed matches the mage', () => {
+  expect(CLASS_DATABASE.ranger.speed).toBe(CLASS_DATABASE.mage.speed);
+});

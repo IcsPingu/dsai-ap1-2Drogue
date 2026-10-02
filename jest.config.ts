@@ -7,12 +7,7 @@ const config: Config = {
   roots: ['<rootDir>/src/tests'],
   moduleFileExtensions: ['ts', 'js'],
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
-  },
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.json',
-    },
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },
 };
 export default config;

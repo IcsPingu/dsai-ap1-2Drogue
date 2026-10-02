@@ -85,6 +85,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setSize(42, 58).setOffset(43, 48);
     if (heroClass.primaryStyle === 'arrow') {
       this.archerBow = new ArcherBow(scene, textureKey);
+      this.updateBowChargePose();
       scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.syncArcherBow, this);
     }
 
@@ -186,7 +187,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.isDodging) {
       this.faceMovement(this.heroClass.primaryStyle === 'arrow' ? this.facingX : vx);
     }
-    // The charge pose overrides walking frames, but never stops movement physics.
+    // The archer uses one body for idle, movement and shooting. Swapping to the
+    // original sheet here changes the character's proportions between shots.
     const drawingBow = this.updateBowChargePose();
     if (!this.animationLocked && !drawingBow) {
       if (vx !== 0 || vy !== 0) {
@@ -194,15 +196,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.walkPhase += delta * 0.018;
         const stepStretch = Math.abs(Math.sin(this.walkPhase)) * 0.035;
         this.setScale(this.baseScaleX * (1 + stepStretch), this.baseScaleY * (1 - stepStretch));
-        if (this.footstepEffectCooldown <= 0) {
-          this.spawnFootstepDust();
-          this.footstepEffectCooldown = 155;
-        }
       } else {
         this.stop();
         this.setTexture(this.animationPrefix, 0);
         this.setScale(this.baseScaleX, this.baseScaleY);
       }
+    }
+    if (!this.animationLocked && !this.isDodging && (vx !== 0 || vy !== 0) && this.footstepEffectCooldown <= 0) {
+      this.spawnFootstepDust();
+      this.footstepEffectCooldown = 155;
     }
     if (this.keyAttack && Phaser.Input.Keyboard.JustDown(this.keyAttack)) this.usePrimaryWeapon();
   }
@@ -217,18 +219,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.heroClass.primaryStyle !== 'arrow') return false;
     const charging = this.isChargingAttack();
     const releasing = this.bowReleaseUntil > 0 && this.scene.time.now < this.bowReleaseUntil;
-    if ((!charging && !releasing) || this.isDodging || this.animationLocked) {
+    if ((!charging && !releasing && !this.archerBow) || this.isDodging || this.animationLocked) {
       this.archerBow?.hide();
       return false;
     }
-    // Prepare the arrow, pull the string, then hold it until the button is released.
+    // Keep the same body and scale even before drawing and after releasing.
+    // Only the arms, string and arrow change during an ordinary attack.
     const frame = releasing ? 6 : this.getChargeRatio() < 0.45 ? 4 : 5;
     const angle = releasing ? this.bowReleaseAngle : Math.atan2(this.facingY, this.facingX);
     this.stop();
     this.setTexture(this.archerBow?.bodyKey ?? this.animationPrefix, this.archerBow ? undefined : frame);
     this.setScale(this.baseScaleX, this.baseScaleY);
     this.faceMovement(Math.cos(angle));
-    this.archerBow?.setPose(frame - 4, angle);
+    this.archerBow?.setPose(frame - 4, angle, releasing ? 0 : this.getChargeRatio());
     this.syncArcherBow();
     return true;
   }

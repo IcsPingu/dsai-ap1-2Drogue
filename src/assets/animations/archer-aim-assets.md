@@ -1,0 +1,15 @@
+# Bases da animação de arco
+
+Os arquivos `ranger_woman_aim_body_v2.png` e `ranger_man_aim_body_v2.png` foram gerados com a ferramenta integrada **image_gen** usando as sprites originais como referência. Nenhuma sprite original foi sobrescrita.
+
+Cada saída foi enquadrada pelo canal alfa e reduzida com vizinho mais próximo para 128 × 114, com altura de 108 pixels. O corpo permanece intacto; braços, corda e arco são desenhados separadamente pelo código.
+
+## Prompts utilizados
+
+### woman
+
+Use case: precise-object-edit. Create ONE production-ready transparent game sprite layer, based on the FIRST top-left sprite of the attached woman ranger sheet. Output a SINGLE isolated woman ranger BODY in the identical green hood, hair, face, gold-trimmed tunic/cape, quiver, dark trousers and leather boots. Preserve that character's design, proportions, crisp detailed low-resolution pixel-art style, upright three-quarter view facing screen RIGHT, and original standing stance. Remove the bow, arrows being held, both hands and forearms; restore the clothing underneath cleanly. The upper arms remain tucked at the shoulders with short white sleeves ending naturally at the elbows, ready for separate animated forearms to be composited. There must be no floating fragments, no cut-out holes, no painted-over rectangles, no bowstrings crossing the body, no floor or shadow. The intent is a clean reusable skeletal animation body layer, not an amputee illustration. Use an actual transparent alpha background. Full character from hat to boots, centered with a small transparent margin. Match the visual detail density of a 128x114 pixel sprite even if you must deliver an integer-upscaled PNG. No sheet, no multiple poses, no weapon, no labels, no grid, no checkerboard.
+
+### man
+
+Use case: precise-object-edit. Create ONE production-ready transparent game sprite layer, based on the FIRST top-left sprite of the attached man ranger sheet. Output a SINGLE isolated man ranger BODY in the identical green hood, hair, face, gold-trimmed tunic/cape, quiver, dark trousers and leather boots. Preserve that character's design, proportions, crisp detailed low-resolution pixel-art style, upright three-quarter view facing screen RIGHT, and original standing stance. Remove the bow, arrows being held, both hands and forearms; restore the clothing underneath cleanly. The upper arms remain tucked at the shoulders with short white sleeves ending naturally at the elbows, ready for separate animated forearms to be composited. There must be no floating fragments, no cut-out holes, no painted-over rectangles, no bowstrings crossing the body, no floor or shadow. The intent is a clean reusable skeletal animation body layer, not an amputee illustration. Use an actual transparent alpha background. Full character from hat to boots, centered with a small transparent margin. Match the visual detail density of a 128x114 pixel sprite even if you must deliver an integer-upscaled PNG. No sheet, no multiple poses, no weapon, no labels, no grid, no checkerboard.

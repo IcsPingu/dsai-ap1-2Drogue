@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { PlayerClassDefinition, getPlayerClass } from '../data/ClassDatabase';
 import { SoundManager } from '../managers/SoundManager';
+import { ArcherBow } from './ArcherBow';
+import { getArcherAimOrigin } from '../utils/ArcherAimTextures';
 
 export type CombatProjectile = Phaser.Physics.Arcade.Sprite & {
   bulletDamage: number;
@@ -50,9 +52,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private walkPhase = 0;
   private chargeStartedAt: number | null = null;
   private shadowToken = 0;
+  private archerBow?: ArcherBow;
+  private bowReleaseUntil = 0;
+  private bowReleaseAngle = 0;
 
   private static readonly MAX_CHARGE_MS = 1100;
   private static readonly ROGUE_THROW_THRESHOLD_MS = 220;
+  private static readonly MAGIC_BOLT_RANGE = 455;
 
   constructor(
     scene: Phaser.Scene,
@@ -69,6 +75,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.maxMagic = heroClass.maxMagic;
     this.magic = this.maxMagic;
     this.speed = heroClass.speed;
+    this.faceMovement(this.facingX);
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setCollideWorldBounds(true).setBounce(0.1).setDepth(10);
@@ -76,6 +83,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
     this.setSize(42, 58).setOffset(43, 48);
+    if (heroClass.primaryStyle === 'arrow') {
+      this.archerBow = new ArcherBow(scene, textureKey);
+      scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.syncArcherBow, this);
+    }
 
     if (scene.input.keyboard) {
       this.cursors = scene.input.keyboard.createCursorKeys();
@@ -91,19 +102,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       scene.input.off('pointerdown', this.handlePointerDown, this);
       scene.input.off('pointerup', this.handlePointerUp, this);
+      scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.syncArcherBow, this);
+      this.archerBow?.destroy();
     });
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]): void {
     if (!this.combatInputEnabled || currentlyOver.length > 0) return;
-    this.aimAt(pointer.worldX, pointer.worldY);
+    this.aimAtPointer(pointer);
     if (pointer.rightButtonDown()) {
       this.chargeStartedAt = null;
       this.fireSpecial();
     }
     else if (pointer.leftButtonDown()) {
       if (this.heroClass.primaryStyle === 'arrow' || this.heroClass.primaryStyle === 'daggers') {
-        if (this.attackCooldown <= 0) this.chargeStartedAt = this.scene.time.now;
+        if (this.attackCooldown <= 0 && !this.isDodging) {
+          this.chargeStartedAt = this.scene.time.now;
+          this.updateBowChargePose();
+        }
       } else {
         this.usePrimaryWeapon();
       }
@@ -115,7 +131,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const heldMs = this.scene.time.now - this.chargeStartedAt;
     this.chargeStartedAt = null;
     if (!this.combatInputEnabled || !this.active) return;
-    this.aimAt(pointer.worldX, pointer.worldY);
+    this.aimAtPointer(pointer);
     const charge = Phaser.Math.Clamp(heldMs / Player.MAX_CHARGE_MS, 0, 1);
     if (this.heroClass.primaryStyle === 'daggers' && heldMs < Player.ROGUE_THROW_THRESHOLD_MS) {
       this.performPrimaryAttack(0, false);
@@ -127,7 +143,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public updatePlayer(_time: number, delta: number): void {
     if (!this.active || !this.body) return;
     if (!this.combatInputEnabled) this.chargeStartedAt = null;
-    this.aimAt(this.scene.input.activePointer.worldX, this.scene.input.activePointer.worldY);
+    this.aimAtPointer(this.scene.input.activePointer);
     this.attackCooldown = Math.max(0, this.attackCooldown - delta);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - delta);
     this.footstepEffectCooldown = Math.max(0, this.footstepEffectCooldown - delta);
@@ -167,10 +183,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(vx * this.speed, vy * this.speed);
     }
 
-    // The authored sprites face screen-left. Mirror them only while travelling
-    // right, so D/right always reads as moving forward to the right.
-    if (!this.isDodging && vx !== 0) this.setFlipX(vx > 0);
-    if (!this.animationLocked) {
+    if (!this.isDodging) {
+      this.faceMovement(this.heroClass.primaryStyle === 'arrow' ? this.facingX : vx);
+    }
+    // The charge pose overrides walking frames, but never stops movement physics.
+    const drawingBow = this.updateBowChargePose();
+    if (!this.animationLocked && !drawingBow) {
       if (vx !== 0 || vy !== 0) {
         this.play(`${this.animationPrefix}_walk`, true);
         this.walkPhase += delta * 0.018;
@@ -182,16 +200,57 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
       } else {
         this.stop();
-        this.setFrame(0);
+        this.setTexture(this.animationPrefix, 0);
         this.setScale(this.baseScaleX, this.baseScaleY);
       }
     }
     if (this.keyAttack && Phaser.Input.Keyboard.JustDown(this.keyAttack)) this.usePrimaryWeapon();
   }
 
+  private faceMovement(directionX: number): void {
+    if (Math.abs(directionX) < 0.001) return;
+    const originallyFacesRight = this.heroClass.spriteFacing === 'right';
+    this.setFlipX(originallyFacesRight ? directionX < 0 : directionX > 0);
+  }
+
+  private updateBowChargePose(): boolean {
+    if (this.heroClass.primaryStyle !== 'arrow') return false;
+    const charging = this.isChargingAttack();
+    const releasing = this.bowReleaseUntil > 0 && this.scene.time.now < this.bowReleaseUntil;
+    if ((!charging && !releasing) || this.isDodging || this.animationLocked) {
+      this.archerBow?.hide();
+      return false;
+    }
+    // Prepare the arrow, pull the string, then hold it until the button is released.
+    const frame = releasing ? 6 : this.getChargeRatio() < 0.45 ? 4 : 5;
+    const angle = releasing ? this.bowReleaseAngle : Math.atan2(this.facingY, this.facingX);
+    this.stop();
+    this.setTexture(this.archerBow?.bodyKey ?? this.animationPrefix, this.archerBow ? undefined : frame);
+    this.setScale(this.baseScaleX, this.baseScaleY);
+    this.faceMovement(Math.cos(angle));
+    this.archerBow?.setPose(frame - 4, angle);
+    this.syncArcherBow();
+    return true;
+  }
+
+  private syncArcherBow(): void {
+    if (!this.active || !this.combatInputEnabled || this.isDodging) {
+      this.archerBow?.hide();
+      return;
+    }
+    this.archerBow?.sync(this.x, this.y, this.scaleX, this.scaleY, this.flipX, this.alpha);
+  }
+
+  private getAimOrigin(): { x: number; y: number } {
+    return this.heroClass.primaryStyle === 'arrow'
+      ? getArcherAimOrigin(this.x, this.y, this.baseScaleY ?? 1)
+      : { x: this.x, y: this.y };
+  }
+
   private aimAt(x: number, y: number): void {
-    const dx = x - this.x;
-    const dy = y - this.y;
+    const origin = this.getAimOrigin();
+    const dx = x - origin.x;
+    const dy = y - origin.y;
     const length = Math.hypot(dx, dy);
     if (length > 2) {
       this.facingX = dx / length;
@@ -228,17 +287,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       });
       SoundManager.playSwordSlash();
     } else if (this.heroClass.primaryStyle === 'orb') {
-      this.scene.time.delayedCall(170, () => {
-        if (this.active) this.fireProjectile(0, this.heroClass.baseDamage, this.heroClass.projectileSpeed, 1300, 1, false, 0, aimAngle);
-      });
+      // Launch on input; the casting animation must not delay the actual shot.
+      const lifetime = (Player.MAGIC_BOLT_RANGE / this.heroClass.projectileSpeed) * 1000;
+      this.fireProjectile(0, this.heroClass.baseDamage, this.heroClass.projectileSpeed, lifetime, 1, false, 0, aimAngle);
       SoundManager.playGunshot();
     } else {
       const damage = this.heroClass.baseDamage * Phaser.Math.Linear(1, 2.25, charge);
       const speed = Phaser.Math.Linear(this.heroClass.projectileSpeed, 720, charge);
       const lifetime = Phaser.Math.Linear(850, 1600, charge);
-      this.scene.time.delayedCall(140, () => {
-        if (this.active) this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.85, 1.25, charge), false, 0, aimAngle);
-      });
+      // The bow was drawn while charging: release the projectile with the release pose.
+      this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.85, 1.25, charge), false, 0, aimAngle);
       SoundManager.playGunshot();
     }
     this.addMagic(5);
@@ -285,15 +343,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.bulletGroup) return;
     const baseAngle = aimAngle ?? Math.atan2(this.facingY, this.facingX);
     const angle = absoluteAngle ? angleOffset : baseAngle + angleOffset;
-    const bullet = this.scene.physics.add.sprite(this.x, this.y, this.getProjectileTexture()) as CombatProjectile;
-    bullet.setDepth(8).setScale(scale).setRotation(angle);
-    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    const origin = this.getAimOrigin();
+    const bullet = this.scene.physics.add.sprite(origin.x, origin.y, this.getProjectileTexture()) as CombatProjectile;
+    // Keep magic visible immediately instead of hiding its launch behind the hero.
+    bullet.setDepth(this.heroClass.primaryStyle === 'orb' || this.heroClass.primaryStyle === 'arrow' ? 12 : 8)
+      .setScale(scale).setRotation(angle);
     bullet.bulletDamage = damage;
     if (piercingHits > 0) {
       bullet.piercingHits = piercingHits;
       bullet.hitTargets = new Set();
     }
     this.bulletGroup.add(bullet);
+    // Arcade groups reset body velocity when adding a sprite.
+    bullet.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
     this.scene.time.delayedCall(lifetime, () => bullet.active && bullet.destroy());
   }
 
@@ -305,6 +367,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private playSpriteAction(action: 'attack' | 'hurt' | 'dodge'): void {
+    if (action === 'attack' && this.archerBow) {
+      ++this.animationToken;
+      this.animationLocked = false;
+      this.bowReleaseUntil = this.scene.time.now + 150;
+      this.bowReleaseAngle = Math.atan2(this.facingY, this.facingX);
+      this.updateBowChargePose();
+      return;
+    }
+    this.bowReleaseUntil = 0;
+    this.archerBow?.hide();
     const token = ++this.animationToken;
     this.animationLocked = true;
     this.play(`${this.animationPrefix}_${action}`, true);
@@ -312,7 +384,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (token !== this.animationToken) return;
       this.animationLocked = false;
       this.stop();
-      this.setFrame(0);
+      this.setTexture(this.animationPrefix, 0);
     });
   }
 
@@ -338,19 +410,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       slash.strokePath();
       this.scene.tweens.add({ targets: slash, alpha: 0, scaleX: 1.25, scaleY: 1.25, duration: 190, onComplete: () => slash.destroy() });
     } else if (this.heroClass.primaryStyle === 'orb') {
-      const castX = this.x + this.facingX * 38;
-      const castY = this.y + this.facingY * 38;
-      const cast = this.scene.add.container(castX, castY).setDepth(12).setScale(0.25);
-      const glow = this.scene.add.rectangle(0, 0, 44, 8, 0x321b73, 0.4);
-      const bolt = this.scene.add.rectangle(0, 0, 48, 3, 0xd9fbff, 0.95);
+      const castX = this.x + this.facingX * 18;
+      const castY = this.y + this.facingY * 18;
+      const cast = this.scene.add.container(castX, castY).setDepth(12);
+      const glow = this.scene.add.circle(0, 0, 9, 0x67e8ff, 0.35);
+      const bolt = this.scene.add.circle(0, 0, 4, 0xd9fbff, 0.95);
       cast.add([glow, bolt]);
       cast.setRotation(angle);
       this.scene.tweens.add({
         targets: cast,
-        scaleX: 1.35,
-        scaleY: 0.8,
+        scaleX: 0.4,
+        scaleY: 0.4,
         alpha: 0,
-        duration: 260,
+        duration: 85,
         ease: 'Cubic.Out',
         onComplete: () => cast.destroy(true),
       });
@@ -381,6 +453,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({ targets: slash, alpha: 0, scaleX: 1.3, scaleY: 1.3, duration: 150, onComplete: () => slash.destroy() });
       });
     }
+    if (this.heroClass.primaryStyle === 'orb' || this.heroClass.primaryStyle === 'arrow') return;
     this.scene.tweens.add({
       targets: this,
       scaleX: this.baseScaleX * 1.1,
@@ -395,18 +468,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.heroClass.specialStyle === 'aegis') {
       this.scene.tweens.add({ targets: this, angle: 360, duration: 360, ease: 'Cubic.Out', onComplete: () => this.setAngle(0) });
     } else if (this.heroClass.specialStyle === 'nova') {
-      this.setTint(this.heroClass.accentColor);
-      this.scene.tweens.add({
-        targets: this,
-        scaleX: this.baseScaleX * 1.25,
-        scaleY: this.baseScaleY * 1.25,
-        duration: 180,
-        yoyo: true,
-        onComplete: () => {
-          this.setScale(this.baseScaleX, this.baseScaleY);
-          if (!this.isWitchTimeActive) this.clearTint();
-        },
-      });
+      // The staff animation and nova ring provide feedback without moving the body.
+      return;
     } else if (this.heroClass.specialStyle === 'volley') {
       this.scene.tweens.add({
         targets: this,
@@ -436,6 +499,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public getMeleeDamage(): number { return this.heroClass.baseDamage; }
   public getMeleeRange(): number { return this.heroClass.primaryStyle === 'daggers' ? 78 : this.heroClass.attackRange; }
   public getDodgeDamage(): number { return Math.max(12, this.heroClass.baseDamage * 0.6); }
+  public isChargingAttack(): boolean {
+    return this.active && this.combatInputEnabled && this.chargeStartedAt !== null;
+  }
+
+  private aimAtPointer(pointer: Phaser.Input.Pointer): void {
+    // Cached worldX/Y only refresh on pointer events; the camera can move between them.
+    pointer.updateWorldPoint(this.scene.cameras.main);
+    this.aimAt(pointer.worldX, pointer.worldY);
+    if (this.heroClass.primaryStyle === 'arrow' && !this.isDodging) {
+      this.faceMovement(this.facingX);
+    }
+  }
   public getChargeRatio(): number {
     if (this.chargeStartedAt === null) return 0;
     return Phaser.Math.Clamp((this.scene.time.now - this.chargeStartedAt) / Player.MAX_CHARGE_MS, 0, 1);
@@ -483,18 +558,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   public triggerDodge(directionX = this.facingX, directionY = this.facingY): void {
+    this.chargeStartedAt = null;
     const length = Math.hypot(directionX, directionY);
     if (length > 0.01) {
       this.dodgeDirectionX = directionX / length;
       this.dodgeDirectionY = directionY / length;
     } else {
-      this.dodgeDirectionX = this.flipX ? 1 : -1;
+      const originalDirection = this.heroClass.spriteFacing === 'right' ? 1 : -1;
+      this.dodgeDirectionX = this.flipX ? -originalDirection : originalDirection;
       this.dodgeDirectionY = 0;
     }
     this.isDodging = true;
     this.dodgeAttackId++;
     this.dodgeCooldown = 600;
-    if (Math.abs(this.dodgeDirectionX) > 0.05) this.setFlipX(this.dodgeDirectionX > 0);
+    this.faceMovement(this.dodgeDirectionX);
     this.setAlpha(0.72);
     this.playSpriteAction('dodge');
     [0, 55, 110, 165].forEach(delay => this.spawnDodgeAfterimage(delay));
@@ -526,6 +603,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.spawnSpecialRing(0xf5cf5b);
       return;
     }
+    this.chargeStartedAt = null;
     this.hp = Math.max(0, this.hp - 1);
     this.playSpriteAction('hurt');
     this.setTint(0xff0000);

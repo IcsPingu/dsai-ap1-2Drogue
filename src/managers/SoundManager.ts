@@ -5,6 +5,11 @@
 
 export class SoundManager {
   private static ctx: AudioContext | null = null;
+  private static enabled: boolean = true;
+
+  public static setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
 
   private static getContext(): AudioContext {
     if (!this.ctx) {
@@ -18,6 +23,7 @@ export class SoundManager {
   }
 
   public static playGunshot(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -41,6 +47,7 @@ export class SoundManager {
   }
 
   public static playSwordSlash(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -64,6 +71,7 @@ export class SoundManager {
   }
 
   public static playWitchTimeActivate(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       // Low gong / clock chime warp
@@ -88,6 +96,7 @@ export class SoundManager {
   }
 
   public static playWickedWeave(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -111,6 +120,7 @@ export class SoundManager {
   }
 
   public static playHaloPickup(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -134,6 +144,7 @@ export class SoundManager {
   }
 
   public static playDodgeSwoosh(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -157,6 +168,7 @@ export class SoundManager {
   }
 
   public static playExplosion(): void {
+    if (!this.enabled) return;
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();

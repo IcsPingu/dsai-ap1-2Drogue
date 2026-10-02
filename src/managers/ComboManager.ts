@@ -10,7 +10,7 @@ export class ComboManager {
   private comboText: Phaser.GameObjects.Text;
   private comboCount: number = 0;
   private lastHitTime: number = 0;
-  private timeoutMs: number = 600; // reset after 600 ms of inactivity
+  private timeoutMs: number = 1200;
 
   constructor(scene: Phaser.Scene, comboText: Phaser.GameObjects.Text) {
     this.scene = scene;
@@ -52,6 +52,6 @@ export class ComboManager {
     const level = this.getLevel();
     const multiplier = this.getMultiplier();
     this.comboText.setColor(this.getColor());
-    this.comboText.setText(`Combo: ${this.comboCount} (x${multiplier})`);
+    this.comboText.setText(`COMBO: ${this.comboCount}  x${multiplier}`);
   }
 }

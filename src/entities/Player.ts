@@ -7,9 +7,9 @@ import { WEAPON_DATABASE, WeaponDefinition, MoveDefinition } from '../data/Weapo
 import { SoundManager } from '../managers/SoundManager';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
-  public hp: number = 100;
-  public maxHp: number = 100;
-  public magic: number = 0;
+  public hp: number = 5;
+  public maxHp: number = 5;
+  public magic: number = 100;
   public maxMagic: number = 100;
   public halos: number = 5000;
   public speed: number = 220;
@@ -17,6 +17,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public equippedWeapon: WeaponDefinition = WEAPON_DATABASE.scarborough_fair;
   public comboSequence: ('P' | 'K' | 'D' | 'H')[] = [];
   public comboTimer: number = 0;
+  public meleeAttackId: number = 0;
 
   public isDodging: boolean = false;
   public dodgeCooldown: number = 0;
@@ -33,6 +34,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Projectile group (set by GameScene)
   public bulletGroup?: Phaser.Physics.Arcade.Group;
+  public combatInputEnabled: boolean = true;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyW?: Phaser.Input.Keyboard.Key;
@@ -43,14 +45,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private keyKick?: Phaser.Input.Keyboard.Key;
   private keyDodge?: Phaser.Input.Keyboard.Key;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'player_bayo');
+  constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string = 'player_bayo') {
+    super(scene, x, y, textureKey);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
     this.setCollideWorldBounds(true);
     this.setBounce(0.1);
     this.setDepth(10);
+    this.setSize(28, 42);
+    this.setOffset(11, 18);
 
     if (scene.input && scene.input.keyboard) {
       this.cursors = scene.input.keyboard.createCursorKeys();
@@ -62,10 +66,29 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.keyKick = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
       this.keyDodge = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     }
+
+    scene.input.on('pointerdown', this.handlePointerDown, this);
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      scene.input.off('pointerdown', this.handlePointerDown, this);
+    });
+  }
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]): void {
+    if (!this.combatInputEnabled || currentlyOver.length > 0) return;
+    this.aimAt(pointer.worldX, pointer.worldY);
+    if (pointer.rightButtonDown()) {
+      this.fireSpecial();
+    } else if (pointer.leftButtonDown()) {
+      this.executeAttack('P');
+      this.fireBullet('punch');
+    }
   }
 
   public updatePlayer(time: number, delta: number): void {
     if (!this.active || !this.body) return;
+
+    const pointer = this.scene.input.activePointer;
+    this.aimAt(pointer.worldX, pointer.worldY);
 
     // Handle Witch Time countdown
     if (this.isWitchTimeActive) {
@@ -98,13 +121,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.cursors?.right.isDown || this.keyD?.isDown) vx += 1;
     if (this.cursors?.up.isDown || this.keyW?.isDown) vy -= 1;
     if (this.cursors?.down.isDown || this.keyS?.isDown) vy += 1;
-
-    // Update facing direction whenever moving
-    if (vx !== 0 || vy !== 0) {
-      const mag = Math.sqrt(vx * vx + vy * vy);
-      this.facingX = vx / mag;
-      this.facingY = vy / mag;
-    }
 
     if (vx !== 0 && vy !== 0) {
       vx *= 0.7071;
@@ -140,6 +156,33 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.holdFireTimer = 0;
     }
+  }
+
+  private aimAt(x: number, y: number): void {
+    const dx = x - this.x;
+    const dy = y - this.y;
+    const length = Math.hypot(dx, dy);
+    if (length > 2) {
+      this.facingX = dx / length;
+      this.facingY = dy / length;
+    }
+  }
+
+  private fireSpecial(): void {
+    if (!this.bulletGroup || this.magic < 25) return;
+    this.magic -= 25;
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const bullet = this.scene.physics.add.sprite(this.x, this.y, 'proj_divine_arrow');
+      bullet.setTint(0xc06cff);
+      bullet.setVelocity(Math.cos(angle) * 380, Math.sin(angle) * 380);
+      bullet.setRotation(angle);
+      (bullet as Phaser.Physics.Arcade.Sprite & { bulletDamage: number }).bulletDamage = this.equippedWeapon.baseDamage * 1.5;
+      this.bulletGroup.add(bullet);
+      this.scene.time.delayedCall(900, () => bullet.active && bullet.destroy());
+    }
+    this.spawnWickedWeaveEffect(this.equippedWeapon.moves[0]);
+    SoundManager.playWickedWeave();
   }
 
   /** Fire a projectile bullet in the current facing direction */
@@ -210,6 +253,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   public executeAttack(input: 'P' | 'K'): void {
+    this.meleeAttackId++;
     this.comboSequence.push(input);
     this.comboTimer = 0;
 
@@ -275,14 +319,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     });
   }
 
-  public takeDamage(amount: number): void {
+  public takeDamage(_amount: number): void {
     if (this.isDodging) {
       // Perfect Dodge triggers Witch Time!
       this.triggerWitchTime();
       return;
     }
 
-    this.hp = Math.max(0, this.hp - amount);
+    this.hp = Math.max(0, this.hp - 1);
     this.setTint(0xff0000);
     this.scene.time.delayedCall(150, () => {
       if (!this.isWitchTimeActive) this.clearTint();

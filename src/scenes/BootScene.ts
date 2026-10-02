@@ -24,6 +24,10 @@ export class BootScene extends Phaser.Scene {
         frameHeight: 114,
       });
     });
+    ['woman', 'man'].forEach(gender => {
+      this.load.image(`anim_ranger_${gender}_aim_body`,
+        new URL(`../assets/animations/ranger_${gender}_aim_body_v2.png`, import.meta.url).href);
+    });
     ['enemy_melee', 'enemy_ranged', 'boss_guardian'].forEach(enemy => {
       this.load.spritesheet(`${enemy}_anim`, new URL(`../assets/animations/${enemy}.png`, import.meta.url).href, {
         frameWidth: 128,

@@ -17,14 +17,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private attackAnimationCooldown = 0;
   private dying = false;
 
+  // Telegraphed lunge strike (dodgeable "attack" instead of pure contact damage)
+  private strikeState: 'none' | 'telegraph' | 'lunge' | 'recover' = 'none';
+  private strikeTimer = 0;
+  private strikeCooldown = 0;
+  private strikeDirX = 0;
+  private strikeDirY = 0;
+  private strikeHitDone = false;
+  private shockwaveCooldown = 0;
+
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string = 'enemy_affinity') {
     super(scene, x, y, textureKey);
     this.animationPrefix = textureKey;
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.hp = 100;
-    this.maxHp = 100;
+    this.hp = 160;
+    this.maxHp = 160;
     this.speed = 80;
     this.attackDamage = 15;
     this.enemyType = 'affinity';
@@ -56,6 +65,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   public die(): void {
+    // Drop halos as currency on death
+    const drops = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < drops; i++) {
+      const ox = (Math.random() - 0.5) * 24;
+      const oy = (Math.random() - 0.5) * 24;
+      this.scene.events.emit('enemyDropHalo', this.x + ox, this.y + oy);
+    }
     this.destroy();
   }
 
@@ -69,13 +85,81 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.active || !this.body || this.dying) return;
     this.syncHealthBar();
     this.attackAnimationCooldown = Math.max(0, this.attackAnimationCooldown - _delta);
+    this.strikeCooldown = Math.max(0, this.strikeCooldown - _delta);
+    this.shockwaveCooldown = Math.max(0, this.shockwaveCooldown - _delta);
 
-    // Basic AI tracking player position
     const dx = playerX - this.x;
     const dy = playerY - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
+    // Telegraph: flash red and pause before the lunge so the player can dodge
+    if (this.strikeState === 'telegraph') {
+      this.strikeTimer -= _delta;
+      this.setVelocity(0, 0);
+      this.updateMovementAnimation(false);
+      if (this.strikeTimer <= 0) {
+        this.strikeState = 'lunge';
+        this.strikeTimer = 300;
+        this.strikeHitDone = false;
+        if (dist > 1) {
+          this.strikeDirX = dx / dist;
+          this.strikeDirY = dy / dist;
+        }
+        this.clearTint();
+        this.playEnemyAction('attack');
+      }
+      return;
+    }
+
+    // Lunge: fast, committed burst — dodging through it triggers Witch Time
+    if (this.strikeState === 'lunge') {
+      this.strikeTimer -= _delta;
+      this.setVelocity(this.strikeDirX * 430 * speedMultiplier, this.strikeDirY * 430 * speedMultiplier);
+      if (!this.strikeHitDone && dist < 38) {
+        this.strikeHitDone = true;
+        this.scene.events.emit('enemyMeleeStrike', this.attackDamage);
+      }
+      if (this.strikeTimer <= 0) {
+        this.strikeState = 'recover';
+        this.strikeTimer = 420;
+        this.setVelocity(0, 0);
+      }
+      return;
+    }
+
+    if (this.strikeState === 'recover') {
+      this.strikeTimer -= _delta;
+      this.setVelocity(0, 0);
+      this.updateMovementAnimation(false);
+      if (this.strikeTimer <= 0) {
+        this.strikeState = 'none';
+        this.strikeCooldown = 1400;
+      }
+      return;
+    }
+
     if (dist > 20 && dist < 400) {
+      // Second move: radial shockwave when the player presses in close
+      if (dist < 80 && this.shockwaveCooldown <= 0 && this.strikeState === 'none') {
+        this.shockwaveCooldown = 3200;
+        this.setVelocity(0, 0);
+        this.playEnemyAction('attack');
+        const ring = this.scene.add.circle(this.x, this.y, 24, 0xff8800, 0.25)
+          .setStrokeStyle(5, 0xff5500, 0.9)
+          .setDepth(15);
+        this.scene.tweens.add({ targets: ring, alpha: 0, scaleX: 4, scaleY: 4, duration: 420, onComplete: () => ring.destroy() });
+        this.scene.events.emit('enemyShockwave', this.x, this.y, this.attackDamage);
+        return;
+      }
+      // Start a telegraphed strike when in range
+      if (dist < 150 && dist > 40 && this.strikeCooldown <= 0) {
+        this.strikeState = 'telegraph';
+        this.strikeTimer = 550;
+        this.setTint(0xff3333);
+        this.setVelocity(0, 0);
+        this.updateMovementAnimation(false);
+        return;
+      }
       const vx = (dx / dist) * this.speed * speedMultiplier;
       const vy = (dy / dist) * this.speed * speedMultiplier;
       this.setVelocity(vx, vy);

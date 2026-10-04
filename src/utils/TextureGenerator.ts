@@ -202,6 +202,32 @@ export class TextureGenerator {
       g.destroy();
     }
 
+    // 7b. Summon — small glowing wisp (tinted per class at spawn)
+    if (!tm.exists('fx_summon')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xffffff, 0.35);
+      g.fillCircle(12, 12, 11);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(12, 12, 6);
+      g.fillStyle(0xffffff, 0.8);
+      g.fillCircle(9, 9, 2);
+      g.generateTexture('fx_summon', 24, 24);
+      g.destroy();
+    }
+
+    // 7b. Key pickup
+    if (!tm.exists('item_key')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xffd700, 1);
+      g.fillCircle(7, 7, 6);
+      g.fillStyle(0x000000, 0);
+      g.fillStyle(0xffd700, 1);
+      g.fillRect(11, 5, 9, 4);
+      g.fillRect(16, 9, 3, 4);
+      g.generateTexture('item_key', 24, 24);
+      g.destroy();
+    }
+
     // 8. Map Tiles — Wall, Floor, Pillar, Water, Lava, Door, Chest, Stairs
     if (!tm.exists('tile_floor')) {
       const g = scene.make.graphics({ x: 0, y: 0 });

@@ -5,6 +5,7 @@ import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
 import { CharacterCreatorScene } from './scenes/CharacterCreatorScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { CatalogScene } from './scenes/CatalogScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -18,7 +19,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, MenuScene, CharacterCreatorScene, SettingsScene, GameScene],
+  scene: [BootScene, MenuScene, CharacterCreatorScene, SettingsScene, CatalogScene, GameScene],
   physics: {
     default: 'arcade',
     arcade: {

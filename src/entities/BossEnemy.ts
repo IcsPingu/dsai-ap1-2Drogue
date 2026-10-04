@@ -8,15 +8,15 @@ export class BossEnemy extends Enemy {
   private phase: number = 1;
   private bossName: string;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, bossName: string = 'Fortitudo', textureKey: string = 'boss_guardian_anim') {
+  constructor(scene: Phaser.Scene, x: number, y: number, bossName: string = 'Fortitudo', textureKey: string = 'boss_guardian_anim', hp = 1600, scale = 1) {
     super(scene, x, y, textureKey);
     this.bossName = bossName;
-    this.maxHp = 1000;
-    this.hp = 1000;
+    this.maxHp = hp;
+    this.hp = hp;
     this.speed = 40;
     this.attackDamage = 35;
-    this.setDisplaySize(126, 112);
-    this.setSize(58, 70).setOffset(35, 38);
+    this.setDisplaySize(126 * scale, 112 * scale);
+    this.setSize(58 * scale, 70 * scale).setOffset(35 * scale, 38 * scale);
   }
 
   public override updateEnemy(playerX: number, playerY: number, delta: number, speedMultiplier: number = 1): void {

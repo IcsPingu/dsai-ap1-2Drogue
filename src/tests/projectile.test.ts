@@ -54,6 +54,7 @@ test('archer charge fills while holding and resets when the arrow is released', 
   Object.assign(player, {
     x: 0, y: 0, active: true, combatInputEnabled: true,
     heroClass: CLASS_DATABASE.ranger, attackCooldown: 0, chargeStartedAt: null,
+    comboSequence: [], comboTimer: 0, comboWindowStart: null, comboInputLock: 0,
     scene: { time, cameras: { main: {} } }, performPrimaryAttack,
     animationPrefix: 'anim_ranger_woman', baseScaleX: 0.67, baseScaleY: 0.67,
     stop: jest.fn(), setTexture, setScale: jest.fn(), setFlipX: jest.fn(),
@@ -78,7 +79,7 @@ test('archer charge fills while holding and resets when the arrow is released', 
   player['updateBowChargePose']();
   expect(setTexture).toHaveBeenLastCalledWith('anim_ranger_woman', 5);
   player['handlePointerUp'](pointer);
-  expect(performPrimaryAttack).toHaveBeenCalledWith(1, true);
+  expect(performPrimaryAttack).toHaveBeenCalledWith(1, true, false);
   expect(player.isChargingAttack()).toBe(false);
   expect(player.getChargeRatio()).toBe(0);
   expect(player['updateBowChargePose']()).toBe(false);
@@ -204,10 +205,10 @@ test('charged arrows launch together with the release animation, without another
     scene: { time: { delayedCall } },
     playSpriteAction, playPrimaryAnimation: jest.fn(), fireProjectile, addMagic: jest.fn(),
   });
-  player['performPrimaryAttack'](1, true);
+  player['performPrimaryAttack'](1, true, false);
   expect(playSpriteAction).toHaveBeenCalledWith('attack');
   expect(fireProjectile).toHaveBeenCalledWith(0, CLASS_DATABASE.ranger.baseDamage * 2.25,
-    720, 1600, 1.25, false, 0, Math.PI);
+    720, 1600, 1.25, false, 0, Math.PI, false);
   expect(delayedCall).not.toHaveBeenCalled();
 });
 
@@ -275,6 +276,7 @@ test('mage launches immediately toward the aim while retaining cooldown and rang
   player['usePrimaryWeapon']();
   expect(fireProjectile).toHaveBeenCalledTimes(1);
   player['attackCooldown'] = 0;
+  player['comboInputLock'] = 0;
   player['usePrimaryWeapon']();
   expect(fireProjectile).toHaveBeenCalledTimes(2);
 });

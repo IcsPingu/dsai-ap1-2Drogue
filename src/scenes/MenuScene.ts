@@ -39,6 +39,7 @@ export class MenuScene extends Phaser.Scene {
     this.createButton(780, 300, 'JOGAR', () => this.scene.start('GameScene'), true);
     this.createButton(780, 385, 'EDITAR PERSONAGEM', () => this.scene.start('CharacterCreatorScene'));
     this.createButton(780, 470, 'AJUSTES', () => this.scene.start('SettingsScene'));
+    this.createButton(780, 555, 'CATÁLOGO', () => this.scene.start('CatalogScene'));
 
     this.add.text(640, 665, 'WASD / SETAS  •  MOUSE  •  B PARA LOJA', {
       fontFamily: 'Courier New, monospace',

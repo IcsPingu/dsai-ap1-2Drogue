@@ -11,6 +11,7 @@ export class ComboManager {
   private comboCount: number = 0;
   private lastHitTime: number = 0;
   private timeoutMs: number = 1200;
+  private readonly rankNames = ['D', 'C', 'B', 'A', 'S', 'SS'];
 
   constructor(scene: Phaser.Scene, comboText: Phaser.GameObjects.Text) {
     this.scene = scene;
@@ -33,13 +34,18 @@ export class ComboManager {
     }
   }
 
-  private getLevel(): number {
-    // Every 5 hits increase level (and multiplier)
-    return Math.floor(this.comboCount / 5) + 1;
+  /** Current damage multiplier from the active combo (1 + rank bonus). */
+  public getDamageMultiplier(): number {
+    return 1 + (this.getLevel() - 1) * 0.25;
   }
 
-  private getMultiplier(): number {
-    return this.getLevel();
+  public getComboCount(): number {
+    return this.comboCount;
+  }
+
+  private getLevel(): number {
+    // Every 5 hits increase level (capped at S/SS rank)
+    return Math.min(Math.floor(this.comboCount / 5) + 1, this.rankNames.length);
   }
 
   private getColor(): string {
@@ -50,8 +56,7 @@ export class ComboManager {
 
   private updateUI(): void {
     const level = this.getLevel();
-    const multiplier = this.getMultiplier();
     this.comboText.setColor(this.getColor());
-    this.comboText.setText(`COMBO: ${this.comboCount}  x${multiplier}`);
+    this.comboText.setText(`COMBO: ${this.comboCount}  RANK ${this.rankNames[level - 1]}  x${this.getDamageMultiplier().toFixed(2)}`);
   }
 }

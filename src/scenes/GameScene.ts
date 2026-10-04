@@ -3,14 +3,16 @@
 // item pickups, Shop UI, Level Progression, and bullet projectile collisions.
 
 import Phaser from 'phaser';
-import { Player, CombatProjectile } from '../entities/Hero';
+import { CombatProjectile, Player } from '../entities/Hero';
+import { Summon, SummonConfig } from '../entities/Summon';
 import { Enemy } from '../entities/Enemy';
 import { BossEnemy } from '../entities/BossEnemy';
 import { RangedEnemy } from '../entities/RangedEnemy';
 import { Item } from '../entities/Item';
 import { TextureGenerator } from '../utils/TextureGenerator';
-import { LevelDefinition } from '../data/LevelData';
+import { LevelDefinition, EnemyPlacement } from '../data/LevelData';
 import { CORRIDOR_LEVEL } from '../data/CorridorLevelData';
+import { VERSE_SECTIONS } from '../data/VerseLevelData';
 import { loadAppearance, loadSettings } from '../data/PlayerProfile';
 import { getCharacterAnimationKey } from '../utils/CharacterTexture';
 import { ShopUI } from '../ui/ShopUI';
@@ -30,12 +32,19 @@ export class GameScene extends Phaser.Scene {
   // Floor tile images (so we can destroy them on level transition)
   private floorImages: Phaser.GameObjects.Image[] = [];
 
-  private allLevels: LevelDefinition[] = [CORRIDOR_LEVEL];
+  private allLevels: LevelDefinition[] = VERSE_SECTIONS;
   private currentLevelIndex: number = 0;
-  private currentLevel: LevelDefinition = CORRIDOR_LEVEL;
+  private currentLevel: LevelDefinition = VERSE_SECTIONS[0];
+  private foundKeys = new Set<string>();
   private isTransitioning: boolean = false;
 
   private shopUI!: ShopUI;
+  private summons: Summon[] = [];
+  private waves: { enemies: EnemyPlacement[] }[] = [];
+  private currentWaveIndex = 0;
+  private waveDelayTimer = 0;
+  private waveTransition = false;
+  private doorSealNotice = 0;
   private keyShop?: Phaser.Input.Keyboard.Key;
   private keyMenu?: Phaser.Input.Keyboard.Key;
 
@@ -51,6 +60,7 @@ export class GameScene extends Phaser.Scene {
   private witchTimeOverlay!: Phaser.GameObjects.Rectangle;
   private aimReticle!: Phaser.GameObjects.Arc;
   private arrowChargeBar!: Phaser.GameObjects.Graphics;
+  private objectiveText!: Phaser.GameObjects.Text;
 
   private levelClearedBannerShowing: boolean = false;
   private controlsGuideOpen: boolean = false;
@@ -135,6 +145,34 @@ export class GameScene extends Phaser.Scene {
     // 9. HUD & Chapter Title
     this.createHUD();
     this.comboManager = new ComboManager(this, this.comboHudText);
+    this.spawnWave(0);
+    this.events.off('enemyDropHalo');
+    this.events.on('enemyDropHalo', (x: number, y: number) => {
+      const halo = new Item(this, x, y, 'item_halo', 'item_halo');
+      this.items.add(halo);
+    });
+    this.events.off('enemyMeleeStrike');
+    this.events.off('playerSummon');
+    this.events.off('enemyShockwave');
+    this.events.off('summonNova');
+    this.events.on('summonNova', (x: number, y: number, dmg: number, radius: number) => {
+      this.enemies.getChildren().forEach(e => {
+        const enemy = e as Enemy;
+        if (enemy.active && Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y) < radius) {
+          enemy.takeDamage(dmg * this.comboManager.getDamageMultiplier());
+          this.comboManager.registerHit();
+        }
+      });
+    });
+    this.events.on('enemyMeleeStrike', (dmg: number) => {
+      if (this.playerDamageCooldown <= 0 || this.player.isDodging) this.damagePlayer(dmg);
+    });
+    this.events.on('playerSummon', (x: number, y: number, classId: string) => this.spawnSummon(x, y, classId));
+    this.events.on('enemyShockwave', (x: number, y: number, dmg: number) => {
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) < 95) {
+        this.damagePlayer(dmg);
+      }
+    });
     this.showChapterTitle(this.currentLevel.name);
     this.createAimReticle();
     this.arrowChargeBar = this.add.graphics().setDepth(30).setVisible(false);
@@ -147,7 +185,9 @@ export class GameScene extends Phaser.Scene {
     // Enemies vs Walls
     this.physics.add.collider(this.enemies, this.wallTiles);
 
-    // Player vs Enemy = contact damage (with cooldown)
+    // Player vs Enemy: dodging through an enemy damages it (Witch Arts).
+    // Contact itself deals NO damage — players are only hurt by telegraphed
+    // attacks (lunge, shockwave, bullets), so camping inside an enemy is safe.
     this.physics.add.overlap(this.player, this.enemies, (_playerObj, enemyObj) => {
       const enemy = enemyObj as Enemy;
       if (this.player.isDodging) {
@@ -157,13 +197,12 @@ export class GameScene extends Phaser.Scene {
         }
         if (!this.dodgeHitTargets.has(enemy)) {
           this.dodgeHitTargets.add(enemy);
-          enemy.takeDamage(this.player.getDodgeDamage());
+          enemy.takeDamage(this.player.getDodgeDamage() * this.comboManager.getDamageMultiplier());
           this.comboManager.registerHit();
         }
         return;
       }
-      if (this.playerDamageCooldown > 0) return;
-      this.damagePlayer(enemy.getAttackDamage());
+      // No contact damage — enemies can overlap the player freely without hurting them.
     });
 
     // Player vs Item Pickups
@@ -175,15 +214,34 @@ export class GameScene extends Phaser.Scene {
         this.player.heal(40);
       } else if (itm.itemType === 'item_magic') {
         this.player.addMagic(25);
+      } else if (itm.itemType === 'item_key') {
+        const keyId = `${this.currentLevelIndex}:${Math.floor(itm.x / 32)},${Math.floor(itm.y / 32)}`;
+        this.foundKeys.add(keyId);
+        this.levelBannerText.setText('EMBOSCADA! Defenda-se!');
+        this.levelBannerText.setVisible(true);
+        this.time.delayedCall(1200, () => this.levelBannerText.setVisible(false));
+        (this.currentLevel.ambush ?? []).forEach(e => this.spawnSingleEnemy(e));
       }
       itm.destroy();
     });
 
-    // Player vs Exit Stairs → advance level
-    this.physics.add.overlap(this.player, this.stairTiles, () => {
-      if (!this.isTransitioning && this.enemies.countActive(true) === 0) {
-        this.advanceToNextLevel();
+    // Player vs Section Doors → travel between sections
+    this.physics.add.overlap(this.player, this.stairTiles, (_playerObj, doorObj) => {
+      if (this.isTransitioning || !this.currentLevel.exits) return;
+      // Doors are sealed while a wave is active — finish the fight first
+      if (this.enemies.countActive(true) > 0 || this.waveTransition) {
+        if (!this.doorSealNotice || this.time.now - this.doorSealNotice > 2000) {
+          this.doorSealNotice = this.time.now;
+          this.levelBannerText.setText('PORTAS SELADAS! Termine o combate.');
+          this.levelBannerText.setVisible(true);
+          this.time.delayedCall(1200, () => this.levelBannerText.setVisible(false));
+        }
+        return;
       }
+      const door = doorObj as Phaser.Physics.Arcade.Sprite;
+      const exit = this.currentLevel.exits.find(e =>
+        Math.abs(e.x * 32 + 16 - door.x) < 24 && Math.abs(e.y * 32 + 16 - door.y) < 24);
+      if (exit) this.transitionToSection(exit);
     });
 
     // Bullets vs Enemies → ranged damage
@@ -193,7 +251,7 @@ export class GameScene extends Phaser.Scene {
       const combatBullet = bullet as CombatProjectile;
       if (combatBullet.hitTargets?.has(enemy)) return;
       combatBullet.hitTargets?.add(enemy);
-      const dmg = combatBullet.bulletDamage || 15;
+      const dmg = (combatBullet.bulletDamage || 15) * this.comboManager.getDamageMultiplier();
       enemy.takeDamage(dmg);
       this.comboManager.registerHit();
       if (combatBullet.piercingHits && combatBullet.piercingHits > 1) {
@@ -219,6 +277,24 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.enemyBullets, this.wallTiles, (bulletObj) => {
       (bulletObj as Phaser.Physics.Arcade.Sprite).destroy();
     });
+  }
+
+  private spawnSummon(x: number, y: number, classId: string): void {
+    const configs: Record<string, SummonConfig> = {
+      // One single big extending sword wave per summon — re-do PPK for another
+      knight: { tint: 0xf5cf5b, damage: 40, attackCooldown: 900, duration: 1100, projectileTexture: 'proj_sword_wave', volleySize: 1, spread: 0, projectileScale: 2.4, piercing: 4 },
+      // Single nova per summon, like the knight's sword wave
+      mage: { tint: 0x62e1ff, damage: 24, attackCooldown: 900, duration: 700, projectileTexture: 'proj_magic_bolt', volleySize: 0, spread: 0, aoeRadius: 95, aoeDamage: 24 },
+      // Volley of many arrows in a wide fan
+      ranger: { tint: 0xc8e66b, damage: 12, attackCooldown: 650, duration: 6500, projectileTexture: 'proj_ranger_arrow', volleySize: 5, spread: 0.13, projectileScale: 0.85, piercing: 2 },
+      // Shadow clone: short-lived, strikes twice with fast daggers
+      rogue: { tint: 0xe84f75, damage: 16, attackCooldown: 420, duration: 700, projectileTexture: 'proj_rogue_dagger', volleySize: 2, spread: 0.2, projectileScale: 1.1 },
+    };
+    const config = configs[classId] ?? configs.knight;
+    // Only one summon at a time — a new finisher replaces the old one
+    this.summons.forEach(s => s.destroy());
+    this.summons = [];
+    this.summons.push(new Summon(this, x, y, config, this.bullets));
   }
 
   private damagePlayer(amount: number): void {
@@ -273,29 +349,66 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private spawnEnemiesAndItems(level: LevelDefinition): void {
-    level.enemies.forEach(e => {
-      const px = e.x * 32 + 16;
-      const py = e.y * 32 + 16;
+  private spawnSingleEnemy(e: EnemyPlacement): void {
+    const px = e.x * 32 + 16;
+    const py = e.y * 32 + 16;
+    if (e.type === 'ranged' || e.type === 'applaud') {
+      this.enemies.add(new RangedEnemy(this, px, py, this.enemyBullets));
+    } else if (e.type === 'boss' || e.type === 'fortitudo') {
+      this.enemies.add(new BossEnemy(this, px, py, 'Fortitudo'));
+    } else if (e.type === 'miniboss') {
+      this.enemies.add(new BossEnemy(this, px, py, 'Sevido', 'boss_guardian_anim', 700, 0.6));
+    } else {
+      this.enemies.add(new Enemy(this, px, py, 'enemy_melee_anim'));
+    }
+  }
 
-      if (e.type === 'ranged' || e.type === 'applaud') {
-        const enemy = new RangedEnemy(this, px, py, this.enemyBullets);
-        this.enemies.add(enemy);
-      } else if (e.type === 'boss' || e.type === 'fortitudo') {
-        const boss = new BossEnemy(this, px, py, 'Fortitudo');
-        this.enemies.add(boss);
-      } else {
-        const enemy = new Enemy(this, px, py, 'enemy_melee_anim');
-        this.enemies.add(enemy);
+  private spawnWave(index: number): void {
+    const wave = this.waves[index];
+    if (!wave) return;
+    wave.enemies.forEach(e => this.spawnSingleEnemy(e));
+    if (this.levelBannerText) {
+      this.levelBannerText.setText(`ONDA ${index + 1} / ${this.waves.length}`);
+      this.levelBannerText.setVisible(true);
+      this.time.delayedCall(1400, () => {
+        if (!this.levelClearedBannerShowing && this.enemies.countActive(true) > 0) {
+          this.levelBannerText.setVisible(false);
+        }
+      });
+    }
+  }
+
+  private spawnEnemiesAndItems(level: LevelDefinition): void {
+    // Build wave schedule: hand-authored waves if present, otherwise chunk by level
+    if (level.waves && level.waves.length > 0) {
+      this.waves = level.waves.map(w => ({ enemies: w.enemies }));
+    } else {
+      const sorted = [...level.enemies].sort((a, b) => a.level - b.level);
+      this.waves = [];
+      for (let i = 0; i < sorted.length; i += 5) {
+        this.waves.push({ enemies: sorted.slice(i, i + 5) });
       }
-    });
+      const minibossSpots = [{ x: 25, y: 8 }, { x: 30, y: 9 }, { x: 34, y: 9 }];
+      const mb = minibossSpots[this.currentLevelIndex] ?? { x: 20, y: 8 };
+      this.waves.push({ enemies: [{ type: 'miniboss', x: mb.x, y: mb.y, level: 9 }] });
+    }
+    this.currentWaveIndex = 0;
+    this.waveDelayTimer = 0;
+    this.waveTransition = false;
+    // Wave 0 is spawned in create() once the HUD (banner text) exists.
 
     level.items.forEach(itm => {
+      // Keys already collected stay collected across revisits
+      if (itm.type === 'key') {
+        const keyId = `${this.currentLevelIndex}:${itm.x},${itm.y}`;
+        if (this.foundKeys.has(keyId)) return;
+      }
       const px = itm.x * 32 + 16;
       const py = itm.y * 32 + 16;
       const isHealth = itm.type === 'potion' || itm.type === 'health_herb';
       const isMagic = itm.type === 'mana_shard';
-      const itemType = isHealth ? 'item_potion' : isMagic ? 'item_magic' : 'item_halo';
+      const isKey = itm.type === 'key';
+      const itemType = isHealth ? 'item_potion' : isMagic ? 'item_magic' : isKey ? 'item_key' : 'item_halo';
       const textureKey = isMagic ? 'item_potion' : itemType;
       const itemEntity = new Item(this, px, py, itemType, textureKey);
       this.items.add(itemEntity);
@@ -368,6 +481,16 @@ export class GameScene extends Phaser.Scene {
       backgroundColor: '#110522',
       padding: { x: 20, y: 10 }
     }).setOrigin(0.5).setScrollFactor(0).setDepth(970).setVisible(false);
+
+    // Objective tracker (what to do next)
+    this.objectiveText = this.add.text(640, 62, '', {
+      fontFamily: 'Courier, monospace',
+      fontSize: '16px',
+      color: '#f6d77a',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(960);
   }
 
   private showChapterTitle(title: string): void {
@@ -379,6 +502,51 @@ export class GameScene extends Phaser.Scene {
       alpha: 0,
       duration: 3500,
       ease: 'Power2'
+    });
+  }
+
+  private transitionToSection(exit: { to: number; spawnX: number; spawnY: number }): void {
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
+    this.cameras.main.flash(500, 255, 215, 0);
+    SoundManager.playWitchTimeActivate();
+
+    this.time.delayedCall(400, () => {
+      this.currentLevelIndex = exit.to;
+      this.currentLevel = this.allLevels[this.currentLevelIndex];
+
+      this.floorImages.forEach(img => img.destroy());
+      this.floorImages = [];
+      this.enemies.clear(true, true);
+      this.items.clear(true, true);
+      this.bullets.clear(true, true);
+      this.enemyBullets.clear(true, true);
+      this.wallTiles.clear(true, true);
+      this.stairTiles.clear(true, true);
+      this.summons.forEach(s => s.destroy());
+      this.summons = [];
+
+      this.buildMapFromDefinition(this.currentLevel);
+      this.spawnEnemiesAndItems(this.currentLevel);
+      this.spawnWave(0);
+
+      this.player.setPosition(exit.spawnX * 32 + 16, exit.spawnY * 32 + 16);
+      this.player.setVelocity(0, 0);
+      this.player.setActive(true);
+      this.player.setVisible(true);
+      this.player.setAlpha(1);
+
+      // Rebuild camera/world bounds for the new section
+      const worldWidth = this.currentLevel.tileMap[0].length * 32;
+      const worldHeight = this.currentLevel.tileMap.length * 32;
+      this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+      this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+
+      this.levelClearedBannerShowing = false;
+      this.currentWaveIndex = 0;
+      this.waveTransition = false;
+      this.showChapterTitle(this.currentLevel.name);
+      this.isTransitioning = false;
     });
   }
 
@@ -410,6 +578,8 @@ export class GameScene extends Phaser.Scene {
       this.items.clear(true, true);
       this.bullets.clear(true, true);
       this.enemyBullets.clear(true, true);
+      this.summons.forEach(s => s.destroy());
+      this.summons = [];
       this.wallTiles.clear(true, true);
       this.stairTiles.clear(true, true);
 
@@ -476,11 +646,35 @@ export class GameScene extends Phaser.Scene {
       enemy.updateEnemy(this.player.x, this.player.y, delta * witchMultiplier, witchMultiplier);
     });
 
-    // Check if level cleared
-    if (activeEnemies.length === 0 && !this.levelClearedBannerShowing) {
-      this.levelClearedBannerShowing = true;
-      this.levelBannerText.setText('CAMINHO LIBERADO!\nEncontre o portal dourado');
-      this.levelBannerText.setVisible(true);
+    // Witch Time also slows enemy projectiles
+    this.enemyBullets.getChildren().forEach(b => {
+      const bullet = b as Phaser.Physics.Arcade.Sprite & { baseVelX?: number; baseVelY?: number };
+      if (bullet.baseVelX !== undefined && bullet.baseVelY !== undefined) {
+        bullet.setVelocity(bullet.baseVelX * witchMultiplier, bullet.baseVelY * witchMultiplier);
+      }
+    });
+
+    // Update active summons
+    this.summons = this.summons.filter(s => s.updateSummon(delta, this.player.x, this.player.y, activeEnemies));
+
+    // Wave progression: when a wave is cleared, delay then spawn the next one
+    if (activeEnemies.length === 0 && !this.waveTransition) {
+      if (this.currentWaveIndex < this.waves.length - 1) {
+        this.waveTransition = true;
+        this.waveDelayTimer = 1200;
+      } else if (!this.levelClearedBannerShowing) {
+        this.levelClearedBannerShowing = true;
+        this.levelBannerText.setText('CAMINHO LIBERADO!\nEncontre o portal dourado');
+        this.levelBannerText.setVisible(true);
+      }
+    }
+    if (this.waveTransition) {
+      this.waveDelayTimer -= delta;
+      if (this.waveDelayTimer <= 0) {
+        this.currentWaveIndex++;
+        this.spawnWave(this.currentWaveIndex);
+        this.waveTransition = false;
+      }
     }
 
     // Melee attack collisions (when player recently tapped J/K)
@@ -495,7 +689,7 @@ export class GameScene extends Phaser.Scene {
           // Check if enemy is roughly in facing direction (dot product)
           const dot = (dx * this.player.facingX + dy * this.player.facingY);
           if (dot > -20) { // generous: hits in facing hemisphere
-            enemy.takeDamage(this.player.getMeleeDamage());
+            enemy.takeDamage(this.player.getMeleeDamage() * this.comboManager.getDamageMultiplier());
             this.comboManager.registerHit();
           }
         }
@@ -515,6 +709,22 @@ export class GameScene extends Phaser.Scene {
     this.aimReticle.setStrokeStyle(2 + charge * 3, charge >= 1 ? 0xffffff : this.player.heroClass.accentColor, 0.9);
     this.aimReticle.setPosition(this.input.activePointer.x, this.input.activePointer.y);
     this.updateArrowChargeBar();
+    this.updateObjective();
+  }
+
+  private updateObjective(): void {
+    // Escaped state — controls guide is covering the screen
+    if (this.controlsGuideOpen || this.shopUI.getIsVisible()) return;
+    const aliveEnemies = this.enemies.countActive(true);
+    let objective = '';
+    if (aliveEnemies > 0 || this.waveTransition) {
+      objective = `OBJETIVO: Derrube os inimigos (Onda ${this.currentWaveIndex + 1}/${this.waves.length}, ${aliveEnemies} restantes)`;
+    } else if (this.currentWaveIndex < this.waves.length - 1) {
+      objective = 'OBJETIVO: Prepare-se para a próxima onda...';
+    } else {
+      objective = 'OBJETIVO: Seção limpa! Procure uma chave ou use uma porta.';
+    }
+    this.objectiveText.setText(objective);
   }
 
   private updateArrowChargeBar(): void {
@@ -552,13 +762,13 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     const classInfo = this.add.text(0, -92,
       `${this.player.heroClass.weaponName}\nDIREITO: ${this.player.heroClass.specialName} - ${this.player.heroClass.specialDescription}`, {
-        fontFamily: 'Courier New, monospace', fontSize: '14px', color: '#cbb8d4', align: 'center',
-        wordWrap: { width: 610 },
-      }).setOrigin(0.5);
+      fontFamily: 'Courier New, monospace', fontSize: '14px', color: '#cbb8d4', align: 'center',
+      wordWrap: { width: 610 },
+    }).setOrigin(0.5);
     const commands = this.add.text(0, 15,
-      'WASD / SETAS   MOVER\nMOUSE           MIRAR\nBOTÃO ESQUERDO  ATACAR / SEGURAR PARA CARREGAR\nBOTÃO DIREITO   USAR ESPECIAL (CONSOME MAGIA)\nESPAÇO          ESQUIVAR E ATRAVESSAR INIMIGOS\nB               LOJA   •   ESC MENU', {
-        fontFamily: 'Courier New, monospace', fontSize: '18px', color: '#ffffff', lineSpacing: 8, align: 'left',
-      }).setOrigin(0.5);
+      'WASD / SETAS   MOVER\nMOUSE           MIRAR\nBOTÃO ESQUERDO  ATACAR (PUNCH / CARREGAR)\nBOTÃO DIREITO   CHUTE (KICK)\nJ               ATACAR   •   K CHUTE\nESPAÇO          ESQUIVAR E ATRAVESSAR INIMIGOS\nCOMBOS P/K      PPK/KPK = INVOCAÇÃO\nB               LOJA   •   ESC MENU', {
+      fontFamily: 'Courier New, monospace', fontSize: '18px', color: '#ffffff', lineSpacing: 8, align: 'left',
+    }).setOrigin(0.5);
     const hint = this.add.text(0, 140, 'CLIQUE PARA COMEÇAR', {
       fontFamily: 'Courier New, monospace', fontSize: '13px', color: '#a990b6',
     }).setOrigin(0.5);

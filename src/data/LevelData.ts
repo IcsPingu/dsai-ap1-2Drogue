@@ -15,6 +15,17 @@
 //   8 = Spawn point
 //   9 = Boss spawn
 
+export interface SectionExit {
+  /** Tile coords of the door */
+  x: number;
+  y: number;
+  /** Index of the target section */
+  to: number;
+  /** Where the player appears in the target section (tile coords) */
+  spawnX: number;
+  spawnY: number;
+}
+
 export interface EnemyPlacement {
   type: string;
   x: number;
@@ -56,6 +67,8 @@ export interface LevelDefinition {
   enemies: EnemyPlacement[];
   items: ItemPlacement[];
   decorations: DecorationPlacement[];
+  exits?: SectionExit[];
+  ambush?: EnemyPlacement[];
   waves?: { delay: number; enemies: EnemyPlacement[] }[];
   bossId?: string;
   unlockCondition?: string;

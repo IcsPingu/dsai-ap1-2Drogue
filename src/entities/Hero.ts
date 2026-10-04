@@ -25,6 +25,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public dodgeAttackId = 0;
   public isShadowActive = false;
   public dodgeCooldown = 0;
+  public lastAttackKick = false;
+  private comboInputLock = 0;
+  private comboWindowStart: number | null = null;
+  private bufferedInput: 'P' | 'K' | null = null;
+  private bufferedAt = 0;
   public isWitchTimeActive = false;
   public witchTimeRemaining = 0;
   public shieldCharges = 0;
@@ -41,6 +46,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private keyD?: Phaser.Input.Keyboard.Key;
   private keyAttack?: Phaser.Input.Keyboard.Key;
   private keyDodge?: Phaser.Input.Keyboard.Key;
+  private keyKickButton?: Phaser.Input.Keyboard.Key;
   private baseScaleX = 1;
   private baseScaleY = 1;
   private readonly animationPrefix: string;
@@ -97,6 +103,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.keyD = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
       this.keyAttack = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
       this.keyDodge = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      this.keyKickButton = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
     }
     scene.input.on('pointerdown', this.handlePointerDown, this);
     scene.input.on('pointerup', this.handlePointerUp, this);
@@ -112,8 +119,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.combatInputEnabled || currentlyOver.length > 0) return;
     this.aimAtPointer(pointer);
     if (pointer.rightButtonDown()) {
-      this.chargeStartedAt = null;
-      this.fireSpecial();
+      // Right MB = Kick combo input (replaces the old special burst)
+      this.executeAttack('K');
     }
     else if (pointer.leftButtonDown()) {
       if (this.heroClass.primaryStyle === 'arrow' || this.heroClass.primaryStyle === 'daggers') {
@@ -122,22 +129,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           this.updateBowChargePose();
         }
       } else {
-        this.usePrimaryWeapon();
+        this.executeAttack('P');
       }
     }
   }
 
   private handlePointerUp(pointer: Phaser.Input.Pointer): void {
-    if (pointer.button !== 0 || this.chargeStartedAt === null) return;
+    if (pointer.button !== 0) return;
+    if (pointer.button === 0 && this.heroClass.primaryStyle !== 'arrow' && this.heroClass.primaryStyle !== 'daggers') {
+      // Melee/orb already fired the punch on press
+      this.chargeStartedAt = null;
+      return;
+    }
+    if (this.chargeStartedAt === null) return;
     const heldMs = this.scene.time.now - this.chargeStartedAt;
     this.chargeStartedAt = null;
     if (!this.combatInputEnabled || !this.active) return;
     this.aimAtPointer(pointer);
     const charge = Phaser.Math.Clamp(heldMs / Player.MAX_CHARGE_MS, 0, 1);
     if (this.heroClass.primaryStyle === 'daggers' && heldMs < Player.ROGUE_THROW_THRESHOLD_MS) {
-      this.performPrimaryAttack(0, false);
+      this.executeAttack('P', 0, false);
     } else {
-      this.performPrimaryAttack(charge, true);
+      this.executeAttack('P', charge, true);
     }
   }
 
@@ -145,9 +158,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.active || !this.body) return;
     if (!this.combatInputEnabled) this.chargeStartedAt = null;
     this.aimAtPointer(this.scene.input.activePointer);
-    this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    // Witch Time: attack cooldown drains faster and magic regenerates
+    this.attackCooldown = Math.max(0, this.attackCooldown - delta * (this.isWitchTimeActive ? 2.5 : 1));
+    if (this.isWitchTimeActive) this.addMagic(delta * 0.02);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - delta);
     this.footstepEffectCooldown = Math.max(0, this.footstepEffectCooldown - delta);
+    this.comboInputLock = Math.max(0, this.comboInputLock - delta);
+    // Consume a buffered combo input once the lockout ends
+    if (this.comboInputLock <= 0 && this.bufferedInput !== null) {
+      const buffered = this.bufferedInput;
+      const bufferedAt = this.bufferedAt;
+      this.bufferedInput = null;
+      if (this.scene.time.now - bufferedAt <= 300) {
+        this.executeAttack(buffered);
+      }
+    }
     if (this.isWitchTimeActive) {
       this.witchTimeRemaining -= delta;
       if (this.witchTimeRemaining <= 0) {
@@ -157,9 +182,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     if (this.comboSequence.length > 0) {
       this.comboTimer += delta;
-      if (this.comboTimer > 1000) {
+      if (this.comboTimer > 1500) {
         this.comboSequence = [];
         this.comboTimer = 0;
+        this.comboWindowStart = null;
       }
     }
 
@@ -207,6 +233,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.footstepEffectCooldown = 155;
     }
     if (this.keyAttack && Phaser.Input.Keyboard.JustDown(this.keyAttack)) this.usePrimaryWeapon();
+    if (this.keyKickButton && Phaser.Input.Keyboard.JustDown(this.keyKickButton)) this.executeAttack('K');
   }
 
   private faceMovement(directionX: number): void {
@@ -262,75 +289,103 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private usePrimaryWeapon(): void {
-    this.performPrimaryAttack(0, false);
+    this.executeAttack('P');
   }
 
-  private performPrimaryAttack(charge: number, throwDagger: boolean): void {
+  /** Bayonetta-style combat input: 'P' = punch (left MB), 'K' = kick (right MB). */
+  public executeAttack(input: 'P' | 'K', charge = 0, throwDagger = false): void {
+    // Animation lockout: an attack must play out before the next one can start.
+    // Early presses are buffered so combos can be chained fluidly.
+    if (this.comboInputLock > 0) {
+      this.bufferedInput = input;
+      this.bufferedAt = this.scene.time.now;
+      return;
+    }
+
+    // Combo sequence expires: finishers must be executed within a tight window
+    if (this.comboSequence.length > 0 && this.comboWindowStart !== null &&
+        this.scene.time.now - this.comboWindowStart > 1500) {
+      this.comboSequence = [];
+      this.comboWindowStart = null;
+    }
+    if (this.comboSequence.length === 0) {
+      this.comboWindowStart = this.scene.time.now;
+    }
+
+    this.comboSequence.push(input);
+    this.comboTimer = 0;
+
+    // Witch Combo finisher: last three inputs match a known pattern within the window
+    const seqStr = this.comboSequence.join('');
+    const last3 = seqStr.slice(-3);
+    const WITCH_COMBOS = ['PPK', 'KPK', 'PKP', 'KKP', 'PKK'];
+    if (this.comboSequence.length >= 3 && WITCH_COMBOS.includes(last3)) {
+      this.comboSequence = [];
+      this.comboWindowStart = null;
+      this.comboInputLock = 620;
+      // Summon burst replaces the old AoE burst as the combo ender
+      if (this.magic >= this.heroClass.magicCost) {
+        this.magic -= this.heroClass.magicCost;
+        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id);
+      }
+      SoundManager.playWickedWeave();
+      this.spawnSpecialRing(this.heroClass.accentColor);
+      this.playSpriteAction('attack');
+      return;
+    }
+
+    this.comboInputLock = input === 'P' ? 220 : 330;
+    if (input === 'P') {
+      this.performPrimaryAttack(charge, throwDagger, false);
+    } else {
+      this.performPrimaryAttack(0, false, true);
+    }
+  }
+
+  private performPrimaryAttack(charge: number, throwDagger: boolean, isKick: boolean): void {
     if (this.attackCooldown > 0) return;
-    this.attackCooldown = this.heroClass.attackCooldown;
-    this.comboSequence.push('P');
+    this.attackCooldown = this.heroClass.attackCooldown * (isKick ? 1.4 : 1);
+    this.lastAttackKick = isKick;
     this.comboTimer = 0;
     this.playSpriteAction('attack');
     this.playPrimaryAnimation();
+    const kickMult = isKick ? 1.6 : 1;
     const aimAngle = Math.atan2(this.facingY, this.facingX);
     if (this.heroClass.primaryStyle === 'melee' || (this.heroClass.primaryStyle === 'daggers' && !throwDagger)) {
       this.scene.time.delayedCall(110, () => {
         if (!this.active) return;
         this.meleeAttackId++;
-        this.spawnSlashEffect();
+        this.spawnSlashEffect(isKick);
       });
       SoundManager.playSwordSlash();
     } else if (this.heroClass.primaryStyle === 'daggers') {
-      const damage = this.heroClass.baseDamage * Phaser.Math.Linear(1.2, 2.2, charge);
+      const damage = this.heroClass.baseDamage * Phaser.Math.Linear(1.2, 2.2, charge) * kickMult;
       const speed = Phaser.Math.Linear(this.heroClass.projectileSpeed, 680, charge);
       const lifetime = Phaser.Math.Linear(650, 1250, charge);
       this.scene.time.delayedCall(90, () => {
         if (!this.active) return;
-        this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.75, 1.05, charge), false, 0, aimAngle);
+        this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.75, 1.05, charge) * (isKick ? 1.3 : 1), false, 0, aimAngle, isKick);
       });
       SoundManager.playSwordSlash();
     } else if (this.heroClass.primaryStyle === 'orb') {
       // Launch on input; the casting animation must not delay the actual shot.
       const lifetime = (Player.MAGIC_BOLT_RANGE / this.heroClass.projectileSpeed) * 1000;
-      this.fireProjectile(0, this.heroClass.baseDamage, this.heroClass.projectileSpeed, lifetime, 1, false, 0, aimAngle);
+      this.fireProjectile(0, this.heroClass.baseDamage * kickMult, this.heroClass.projectileSpeed * (isKick ? 0.8 : 1), lifetime, isKick ? 1.4 : 1, false, 0, aimAngle, isKick);
       SoundManager.playGunshot();
     } else {
-      const damage = this.heroClass.baseDamage * Phaser.Math.Linear(1, 2.25, charge);
+      const damage = this.heroClass.baseDamage * Phaser.Math.Linear(1, 2.25, charge) * kickMult;
       const speed = Phaser.Math.Linear(this.heroClass.projectileSpeed, 720, charge);
       const lifetime = Phaser.Math.Linear(850, 1600, charge);
       // The bow was drawn while charging: release the projectile with the release pose.
-      this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.85, 1.25, charge), false, 0, aimAngle);
+      this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.85, 1.25, charge) * (isKick ? 1.25 : 1), false, 0, aimAngle, isKick);
       SoundManager.playGunshot();
     }
     this.addMagic(5);
   }
 
   private fireSpecial(): void {
-    if (!this.bulletGroup || this.magic < this.heroClass.magicCost) return;
-    this.magic -= this.heroClass.magicCost;
-    this.comboSequence = [];
-    this.playSpriteAction('attack');
-    this.playSpecialAnimation();
-    if (this.heroClass.specialStyle === 'aegis') {
-      this.shieldCharges = 2;
-      for (let i = 0; i < 8; i++) this.fireProjectile((Math.PI * 2 * i) / 8, this.heroClass.baseDamage, 390, 650, 1.2, true);
-    } else if (this.heroClass.specialStyle === 'nova') {
-      for (let i = 0; i < 16; i++) this.fireProjectile((Math.PI * 2 * i) / 16, this.heroClass.baseDamage * 1.6, 400, 1050, 1.25, true);
-    } else if (this.heroClass.specialStyle === 'volley') {
-      for (let i = -3; i <= 3; i++) this.fireProjectile(i * 0.11, this.heroClass.baseDamage * 1.25, 650, 1050, 1, false, 3);
-    } else {
-      const token = ++this.shadowToken;
-      this.isShadowActive = true;
-      this.setAlpha(0.5);
-      this.scene.time.delayedCall(700, () => {
-        if (token !== this.shadowToken) return;
-        this.isShadowActive = false;
-        this.setAlpha(1);
-      });
-      for (let i = 0; i < 12; i++) this.fireProjectile((Math.PI * 2 * i) / 12, this.heroClass.baseDamage * 1.45, 520, 750, 0.8, true);
-    }
-    this.spawnSpecialRing(this.heroClass.accentColor);
-    SoundManager.playWickedWeave();
+    // Special burst is triggered via the Witch Time hold-button path instead.
+    // Kept as a no-op hook for future secondary specials.
   }
 
   private fireProjectile(
@@ -342,6 +397,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     absoluteAngle = false,
     piercingHits = 0,
     aimAngle?: number,
+    isKick = false,
   ): void {
     if (!this.bulletGroup) return;
     const baseAngle = aimAngle ?? Math.atan2(this.facingY, this.facingX);
@@ -351,7 +407,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Keep magic visible immediately instead of hiding its launch behind the hero.
     bullet.setDepth(this.heroClass.primaryStyle === 'orb' || this.heroClass.primaryStyle === 'arrow' ? 12 : 8)
       .setScale(scale).setRotation(angle);
-    bullet.bulletDamage = damage;
+    if (isKick) bullet.setTint(0xff3366);
+    bullet.bulletDamage = damage * (this.isWitchTimeActive ? 2 : 1);
     if (piercingHits > 0) {
       bullet.piercingHits = piercingHits;
       bullet.hitTargets = new Set();
@@ -391,16 +448,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     });
   }
 
-  private spawnSlashEffect(): void {
+  private spawnSlashEffect(isKick = false): void {
     const range = this.getMeleeRange();
     const slash = this.scene.add.circle(
       this.x + this.facingX * range * 0.55,
       this.y + this.facingY * range * 0.55,
-      22,
-      this.heroClass.accentColor,
+      isKick ? 30 : 22,
+      isKick ? 0xff3366 : this.heroClass.accentColor,
       0.65,
     ).setDepth(9);
-    this.scene.tweens.add({ targets: slash, alpha: 0, scaleX: 2.8, scaleY: 1.5, duration: 190, onComplete: () => slash.destroy() });
+    this.scene.tweens.add({ targets: slash, alpha: 0, scaleX: isKick ? 3.4 : 2.8, scaleY: isKick ? 2.0 : 1.5, duration: 190, onComplete: () => slash.destroy() });
   }
 
   private playPrimaryAnimation(): void {
@@ -499,9 +556,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.add({ targets: ring, alpha: 0, scaleX: 5, scaleY: 5, duration: 450, onComplete: () => ring.destroy() });
   }
 
-  public getMeleeDamage(): number { return this.heroClass.baseDamage; }
+  public getMeleeDamage(): number {
+    const kickMult = this.lastAttackKick ? 1.6 : 1;
+    return this.heroClass.baseDamage * kickMult * (this.isWitchTimeActive ? 2 : 1);
+  }
   public getMeleeRange(): number { return this.heroClass.primaryStyle === 'daggers' ? 78 : this.heroClass.attackRange; }
-  public getDodgeDamage(): number { return Math.max(12, this.heroClass.baseDamage * 0.6); }
+  public getDodgeDamage(): number { return Math.max(12, this.heroClass.baseDamage * 0.6) * (this.isWitchTimeActive ? 2 : 1); }
   public isChargingAttack(): boolean {
     return this.active && this.combatInputEnabled && this.chargeStartedAt !== null;
   }

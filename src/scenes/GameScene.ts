@@ -535,6 +535,7 @@ export class GameScene extends Phaser.Scene {
       this.player.setActive(true);
       this.player.setVisible(true);
       this.player.setAlpha(1);
+      this.player.resetResourcesForNextStage();
 
       // Rebuild camera/world bounds for the new section
       const worldWidth = this.currentLevel.tileMap[0].length * 32;
@@ -594,6 +595,7 @@ export class GameScene extends Phaser.Scene {
       this.player.setVisible(true);
       this.player.setActive(true);
       this.player.setAlpha(1);
+      this.player.resetResourcesForNextStage();
 
       // Reset banner states
       this.levelClearedBannerShowing = false;

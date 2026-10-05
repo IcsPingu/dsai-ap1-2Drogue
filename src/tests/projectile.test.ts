@@ -318,6 +318,38 @@ test('mage launches immediately toward the aim while retaining cooldown and rang
   expect(fireProjectile).toHaveBeenCalledTimes(2);
 });
 
+test('starting a new stage restores health and mana but preserves collected coins', () => {
+  const bow = { hide: jest.fn() };
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    hp: 1, maxHp: 5, magic: 9, maxMagic: 110, halos: 7350,
+    shieldCharges: 2, isWitchTimeActive: true, witchTimeRemaining: 900,
+    isShadowActive: true, isDodging: true, chargeStartedAt: 100,
+    bowReleaseUntil: 300, attackCooldown: 200, dodgeCooldown: 500,
+    comboInputLock: 100, comboWindowStart: 20, bufferedInput: 'P',
+    comboSequence: ['P', 'K'], comboTimer: 400, animationLocked: true,
+    animationToken: 4, archerBow: bow, animationPrefix: 'anim_ranger_woman',
+    baseScaleX: 0.67, baseScaleY: 0.67,
+    baseDisplayOriginX: 64, baseDisplayOriginY: 57,
+    clearTint: jest.fn(), setAlpha: jest.fn(), stop: jest.fn(),
+    setTexture: jest.fn(), setScale: jest.fn(), setAngle: jest.fn(),
+    setDisplayOrigin: jest.fn(),
+  });
+
+  player.resetResourcesForNextStage();
+
+  expect({ hp: player.hp, magic: player.magic, halos: player.halos }).toEqual({
+    hp: 5,
+    magic: 110,
+    halos: 7350,
+  });
+  expect(player.comboSequence).toEqual([]);
+  expect(player.isWitchTimeActive).toBe(false);
+  expect(player.isDodging).toBe(false);
+  expect(player.shieldCharges).toBe(0);
+  expect(bow.hide).toHaveBeenCalledTimes(1);
+});
+
 test.each([
   { aim: 0, offset: 0, absolute: false, expected: 0 },
   { aim: Math.PI / 2, offset: 0, absolute: false, expected: Math.PI / 2 },

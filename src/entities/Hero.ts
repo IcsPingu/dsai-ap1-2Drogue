@@ -611,6 +611,32 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setAngle(0);
   }
 
+  /** Starts a new stage fresh while deliberately preserving collected halos. */
+  public resetResourcesForNextStage(): void {
+    this.hp = this.maxHp;
+    this.magic = this.maxMagic;
+    this.shieldCharges = 0;
+    this.isWitchTimeActive = false;
+    this.witchTimeRemaining = 0;
+    this.isShadowActive = false;
+    this.isDodging = false;
+    this.chargeStartedAt = null;
+    this.bowReleaseUntil = 0;
+    this.attackCooldown = 0;
+    this.dodgeCooldown = 0;
+    this.comboInputLock = 0;
+    this.comboWindowStart = null;
+    this.bufferedInput = null;
+    this.comboSequence = [];
+    this.comboTimer = 0;
+    this.animationLocked = false;
+    ++this.animationToken;
+    this.archerBow?.hide();
+    this.clearTint();
+    this.setAlpha(1);
+    this.resetMovementPose();
+  }
+
   private spawnDodgeAfterimage(delay: number): void {
     this.scene.time.delayedCall(delay, () => {
       if (!this.active || !this.isDodging) return;

@@ -46,6 +46,34 @@ test.each(Object.values(CLASS_DATABASE))('$id moves with D/A while the archer ke
   expect(player.flipX).toBe(heroClass.id === 'ranger');
 });
 
+test.each(Object.values(CLASS_DATABASE))('$id uses sprite walk frames without synthetic rocking', heroClass => {
+  const player = Object.create(Player.prototype) as Player;
+  const play = jest.fn();
+  const setScale = jest.fn();
+  const setAngle = jest.fn();
+  Object.assign(player, {
+    x: 0, y: 0, active: true, body: {}, heroClass, speed: heroClass.speed,
+    animationPrefix: `anim_${heroClass.id}_woman`, animationLocked: false,
+    baseScaleX: 86 / 128, baseScaleY: 76 / 114,
+    combatInputEnabled: true, attackCooldown: 0, dodgeCooldown: 0,
+    footstepEffectCooldown: 1000, comboSequence: [], chargeStartedAt: null,
+    bowReleaseUntil: 0, keyD: { isDown: true },
+    scene: {
+      cameras: { main: {} },
+      input: { activePointer: { worldX: 100, worldY: 0, updateWorldPoint: jest.fn() } },
+    },
+    play, setScale, setAngle, setVelocity: jest.fn(),
+    setFlipX: (flip: boolean) => { player.flipX = flip; },
+  });
+
+  player.updatePlayer(0, 16);
+
+  expect(play).toHaveBeenCalledWith(`anim_${heroClass.id}_woman_walk`, true);
+  expect(setScale).toHaveBeenCalledWith(86 / 128, 76 / 114);
+  expect(setAngle).toHaveBeenCalledWith(0);
+  expect(setAngle.mock.calls.every(([angle]) => angle === 0)).toBe(true);
+});
+
 test('archer charge fills while holding and resets when the arrow is released', () => {
   const performPrimaryAttack = jest.fn();
   const time = { now: 100 };
@@ -57,7 +85,9 @@ test('archer charge fills while holding and resets when the arrow is released', 
     comboSequence: [], comboTimer: 0, comboWindowStart: null, comboInputLock: 0,
     scene: { time, cameras: { main: {} } }, performPrimaryAttack,
     animationPrefix: 'anim_ranger_woman', baseScaleX: 0.67, baseScaleY: 0.67,
+    baseDisplayOriginX: 64, baseDisplayOriginY: 57,
     stop: jest.fn(), setTexture, setScale: jest.fn(), setFlipX: jest.fn(),
+    setAngle: jest.fn(), setDisplayOrigin: jest.fn(),
   });
   const pointer = {
     button: 0, worldX: 100, worldY: 0,
@@ -129,9 +159,10 @@ test.each([Math.PI / 2, -Math.PI / 2, Math.PI / 4, -3 * Math.PI / 4])(
     Object.assign(player, {
       active: true, combatInputEnabled: true, heroClass: CLASS_DATABASE.ranger,
       x: 100, y: 100, rotation: 0, alpha: 1, baseScaleX: 0.67, baseScaleY: 0.67,
+      baseDisplayOriginX: 64, baseDisplayOriginY: 57,
       facingX: Math.cos(angle), facingY: Math.sin(angle), chargeStartedAt: 0,
       scene: { time }, archerBow: bow, animationToken: 0, bowReleaseUntil: 0,
-      stop: jest.fn(), setTexture: jest.fn(),
+      stop: jest.fn(), setTexture: jest.fn(), setAngle: jest.fn(), setDisplayOrigin: jest.fn(),
       setScale: (x: number, y: number) => { player.scaleX = x; player.scaleY = y; },
       setFlipX: (flip: boolean) => { player.flipX = flip; },
     });
@@ -146,13 +177,12 @@ test.each([Math.PI / 2, -Math.PI / 2, Math.PI / 4, -3 * Math.PI / 4])(
     expect(bow.setPose).toHaveBeenLastCalledWith(2, angle, 0);
     expect(player.rotation).toBe(0);
     time.now = 800;
-    expect(player['updateBowChargePose']()).toBe(true);
-    expect(bow.setPose).toHaveBeenLastCalledWith(0, angle, 0);
-    expect(bow.hide).not.toHaveBeenCalled();
+    expect(player['updateBowChargePose']()).toBe(false);
+    expect(bow.hide).toHaveBeenCalledTimes(1);
   },
 );
 
-test('archer keeps the same body, scale and position from movement through charge, release and idle', () => {
+test('archer walks with sprite frames and only uses the aim body while firing', () => {
   const time = { now: 0 };
   const bow = { bodyKey: 'archer_body', setPose: jest.fn(), sync: jest.fn(), hide: jest.fn() };
   const setTexture = jest.fn();
@@ -165,8 +195,11 @@ test('archer keeps the same body, scale and position from movement through charg
     attackCooldown: 0, dodgeCooldown: 0, footstepEffectCooldown: 10000,
     comboSequence: [], chargeStartedAt: null, bowReleaseUntil: 0,
     animationLocked: false, animationToken: 0, archerBow: bow,
-    baseScaleX: 86 / 128, baseScaleY: 76 / 114, facingX: 1, facingY: 0,
+    animationPrefix: 'anim_ranger_woman',
+    baseScaleX: 86 / 128, baseScaleY: 76 / 114,
+    baseDisplayOriginX: 64, baseDisplayOriginY: 57, facingX: 1, facingY: 0,
     keyD: { isDown: true }, stop: jest.fn(), play: jest.fn(), setTexture,
+    setAngle: jest.fn(), setDisplayOrigin: jest.fn(),
     setScale: (x: number, y: number) => { setScale(x, y); player.scaleX = x; player.scaleY = y; },
     setVelocity, setFlipX: (flip: boolean) => { player.flipX = flip; },
     scene: { time, cameras: { main: {} }, input: {
@@ -185,10 +218,14 @@ test('archer keeps the same body, scale and position from movement through charg
   Object.assign(player, { keyD: { isDown: false } });
   player.updatePlayer(800, 16);
   expect(setVelocity).toHaveBeenLastCalledWith(0, 0);
-  expect(setTexture.mock.calls).toHaveLength(4);
-  expect(setTexture.mock.calls.every(([key, frame]) => key === 'archer_body' && frame === undefined)).toBe(true);
-  expect(setScale.mock.calls.every(([x, y]) => x === 86 / 128 && y === 76 / 114)).toBe(true);
-  expect(player.play).not.toHaveBeenCalled();
+  expect(setTexture.mock.calls).toEqual([
+    ['archer_body', undefined],
+    ['archer_body', undefined],
+    ['anim_ranger_woman', 0],
+  ]);
+  expect(setScale).toHaveBeenCalled();
+  expect(setScale.mock.calls[setScale.mock.calls.length - 1]).toEqual([86 / 128, 76 / 114]);
+  expect(player.play).toHaveBeenCalledWith('anim_ranger_woman_walk', true);
   expect({ x: player.x, y: player.y }).toEqual({ x: 100, y: 100 });
   expect(player.rotation).toBe(0);
 });

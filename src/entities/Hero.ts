@@ -55,7 +55,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private dodgeDirectionX = 1;
   private dodgeDirectionY = 0;
   private footstepEffectCooldown = 0;
-  private walkPhase = 0;
+  private footstepSide = -1;
   private chargeStartedAt: number | null = null;
   private shadowToken = 0;
   private archerBow?: ArcherBow;
@@ -218,14 +218,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const drawingBow = this.updateBowChargePose();
     if (!this.animationLocked && !drawingBow) {
       if (vx !== 0 || vy !== 0) {
+        // Player and enemies now use the same animation path. The artwork
+        // already contains four distinct contact poses, so no synthetic sway,
+        // rotation or squash is applied on top of the actual sprite frames.
         this.play(`${this.animationPrefix}_walk`, true);
-        this.walkPhase += delta * 0.018;
-        const stepStretch = Math.abs(Math.sin(this.walkPhase)) * 0.035;
-        this.setScale(this.baseScaleX * (1 + stepStretch), this.baseScaleY * (1 - stepStretch));
-      } else {
-        this.stop();
-        this.setTexture(this.animationPrefix, 0);
         this.setScale(this.baseScaleX, this.baseScaleY);
+        this.setAngle(0);
+      } else {
+        this.resetMovementPose();
       }
     }
     if (!this.animationLocked && !this.isDodging && (vx !== 0 || vy !== 0) && this.footstepEffectCooldown <= 0) {
@@ -246,7 +246,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.heroClass.primaryStyle !== 'arrow') return false;
     const charging = this.isChargingAttack();
     const releasing = this.bowReleaseUntil > 0 && this.scene.time.now < this.bowReleaseUntil;
-    if ((!charging && !releasing && !this.archerBow) || this.isDodging || this.animationLocked) {
+    if ((!charging && !releasing) || this.isDodging || this.animationLocked) {
       this.archerBow?.hide();
       return false;
     }
@@ -257,6 +257,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.stop();
     this.setTexture(this.archerBow?.bodyKey ?? this.animationPrefix, this.archerBow ? undefined : frame);
     this.setScale(this.baseScaleX, this.baseScaleY);
+    this.setAngle(0);
     this.faceMovement(Math.cos(angle));
     this.archerBow?.setPose(frame - 4, angle, releasing ? 0 : this.getChargeRatio());
     this.syncArcherBow();
@@ -439,6 +440,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.archerBow?.hide();
     const token = ++this.animationToken;
     this.animationLocked = true;
+    this.setScale(this.baseScaleX, this.baseScaleY);
+    this.setAngle(0);
     this.play(`${this.animationPrefix}_${action}`, true);
     this.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       if (token !== this.animationToken) return;
@@ -580,7 +583,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private spawnFootstepDust(): void {
-    const side = Math.sin(this.walkPhase) >= 0 ? -1 : 1;
+    const side = this.footstepSide;
+    this.footstepSide *= -1;
     const dust = this.scene.add.ellipse(
       this.x + side * 7,
       this.y + 29,
@@ -598,6 +602,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       duration: 170,
       onComplete: () => dust.destroy(),
     });
+  }
+
+  private resetMovementPose(): void {
+    this.stop();
+    this.setTexture(this.animationPrefix, 0);
+    this.setScale(this.baseScaleX, this.baseScaleY);
+    this.setAngle(0);
   }
 
   private spawnDodgeAfterimage(delay: number): void {
@@ -644,7 +655,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (!this.active) return;
       this.isDodging = false;
       this.setAlpha(1);
-      this.setScale(this.baseScaleX, this.baseScaleY);
+      this.resetMovementPose();
     });
   }
 

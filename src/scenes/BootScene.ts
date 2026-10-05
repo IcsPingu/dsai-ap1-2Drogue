@@ -19,7 +19,7 @@ export class BootScene extends Phaser.Scene {
     ];
     classSprites.forEach(sprite => {
       this.load.image(`class_${sprite}`, new URL(`../assets/classes/${sprite}.png`, import.meta.url).href);
-      this.load.spritesheet(`anim_${sprite}`, new URL(`../assets/animations/${sprite}.png`, import.meta.url).href, {
+      this.load.spritesheet(`anim_${sprite}`, new URL(`../assets/animations/${sprite}_walk_v5.png`, import.meta.url).href, {
         frameWidth: 128,
         frameHeight: 114,
       });
@@ -47,8 +47,8 @@ export class BootScene extends Phaser.Scene {
     playerSprites.forEach(key => {
       this.anims.create({
         key: `${key}_walk`,
-        frames: [0, 1, 2, 3, 2, 1].map(frame => ({ key, frame })),
-        frameRate: 10,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }),
+        frameRate: 8,
         repeat: -1,
       });
       const mage = key.startsWith('anim_mage_');

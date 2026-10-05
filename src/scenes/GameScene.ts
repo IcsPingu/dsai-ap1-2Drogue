@@ -19,6 +19,27 @@ import { ShopUI } from '../ui/ShopUI';
 import { SoundManager } from '../managers/SoundManager';
 import { getPlayerClass } from '../data/ClassDatabase';
 import { ComboManager } from '../managers/ComboManager';
+import { GameSimulationBridge } from '../simulation';
+import { PresetId, ProceduralLevelFactory } from '../procedural';
+import { DamageType, GameCombatBridge } from '../combat';
+
+interface GameSceneInitData {
+  skipControls?: boolean;
+  proceduralSeed?: string | number;
+  proceduralPresets?: PresetId[];
+}
+
+const DEFAULT_PROCEDURAL_RUN: readonly PresetId[] = [
+  'cathedral-intro',
+  'crypt-crawl',
+  'ruined-city',
+  'inferno-caverns',
+  'clockwork-maze',
+  'garden-labyrinth',
+  'celestial-bridges',
+  'colosseum-gauntlet',
+  'void-fracture',
+];
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -28,6 +49,8 @@ export class GameScene extends Phaser.Scene {
   private enemyBullets!: Phaser.Physics.Arcade.Group;
   private wallTiles!: Phaser.Physics.Arcade.StaticGroup;
   private stairTiles!: Phaser.Physics.Arcade.StaticGroup;
+  private pendingExitTiles: Array<{ x: number; y: number }> = [];
+  private exitsRevealed = false;
 
   // Floor tile images (so we can destroy them on level transition)
   private floorImages: Phaser.GameObjects.Image[] = [];
@@ -71,14 +94,17 @@ export class GameScene extends Phaser.Scene {
   private lastHandledMeleeAttack: number = 0;
   private lastHandledDodgeAttack: number = 0;
   private dodgeHitTargets = new Set<Enemy>();
+  private simulationBridge!: GameSimulationBridge;
+  private combatBridge!: GameCombatBridge;
 
   constructor() {
     super('GameScene');
   }
 
-  public init(data?: { skipControls?: boolean }): void {
+  public init(data?: GameSceneInitData): void {
     // Phaser keeps the Scene instance on restart, so explicitly reset every
     // run-scoped guard that could otherwise leave update() permanently locked.
+    this.configureLevelRun(data);
     this.currentLevelIndex = 0;
     this.currentLevel = this.allLevels[0];
     this.isTransitioning = false;
@@ -89,7 +115,21 @@ export class GameScene extends Phaser.Scene {
     this.lastHandledDodgeAttack = 0;
     this.dodgeHitTargets.clear();
     this.floorImages = [];
+    this.pendingExitTiles = [];
+    this.exitsRevealed = false;
     this.skipControlsGuide = data?.skipControls ?? false;
+  }
+
+  private configureLevelRun(data?: GameSceneInitData): void {
+    const query = typeof window === 'undefined' ? undefined : new URLSearchParams(window.location.search);
+    const querySeed = query?.get('procedural');
+    const requestedSeed = data?.proceduralSeed ?? (querySeed && querySeed !== '0' ? querySeed : undefined);
+    if (requestedSeed === undefined) {
+      this.allLevels = VERSE_SECTIONS;
+      return;
+    }
+    const presets = data?.proceduralPresets?.length ? data.proceduralPresets : [...DEFAULT_PROCEDURAL_RUN];
+    this.allLevels = new ProceduralLevelFactory().createRun(requestedSeed, presets);
   }
 
   public create(): void {
@@ -115,6 +155,26 @@ export class GameScene extends Phaser.Scene {
     const heroClass = getPlayerClass(appearance.classId);
     this.player = new Player(this, spawn.x, spawn.y, getCharacterAnimationKey(appearance), heroClass);
     this.player.bulletGroup = this.bullets;
+    this.simulationBridge = new GameSimulationBridge({
+      classId: appearance.classId,
+      section: this.currentLevel.name,
+    });
+    this.combatBridge = new GameCombatBridge({
+      classDefinition: heroClass,
+      seed: `${this.currentLevel.id}:${appearance.classId}`,
+    });
+    this.simulationBridge.synchronizePlayer({
+      x: this.player.x,
+      y: this.player.y,
+      health: this.player.hp,
+      maximumHealth: this.player.maxHp,
+      mana: this.player.magic,
+      maximumMana: this.player.maxMagic,
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.simulationBridge.dispose();
+      this.combatBridge.dispose();
+    });
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     const worldWidth = this.currentLevel.tileMap[0].length * 32;
     const worldHeight = this.currentLevel.tileMap.length * 32;
@@ -159,7 +219,7 @@ export class GameScene extends Phaser.Scene {
       this.enemies.getChildren().forEach(e => {
         const enemy = e as Enemy;
         if (enemy.active && Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y) < radius) {
-          enemy.takeDamage(dmg * this.comboManager.getDamageMultiplier());
+          enemy.takeDamage(this.calculatePlayerDamage(dmg));
           this.comboManager.registerHit();
         }
       });
@@ -197,7 +257,7 @@ export class GameScene extends Phaser.Scene {
         }
         if (!this.dodgeHitTargets.has(enemy)) {
           this.dodgeHitTargets.add(enemy);
-          enemy.takeDamage(this.player.getDodgeDamage() * this.comboManager.getDamageMultiplier());
+          enemy.takeDamage(this.calculatePlayerDamage(this.player.getDodgeDamage(), 'shadow'));
           this.comboManager.registerHit();
         }
         return;
@@ -208,6 +268,7 @@ export class GameScene extends Phaser.Scene {
     // Player vs Item Pickups
     this.physics.add.overlap(this.player, this.items, (_playerObj, itemObj) => {
       const itm = itemObj as Item;
+      this.simulationBridge.recordItem(itm.itemType);
       if (itm.itemType === 'item_halo') {
         this.player.addHalos(100);
       } else if (itm.itemType === 'item_potion') {
@@ -227,7 +288,7 @@ export class GameScene extends Phaser.Scene {
 
     // Player vs Section Doors → travel between sections
     this.physics.add.overlap(this.player, this.stairTiles, (_playerObj, doorObj) => {
-      if (this.isTransitioning || !this.currentLevel.exits) return;
+      if (this.isTransitioning) return;
       // Doors are sealed while a wave is active — finish the fight first
       if (this.enemies.countActive(true) > 0 || this.waveTransition) {
         if (!this.doorSealNotice || this.time.now - this.doorSealNotice > 2000) {
@@ -239,9 +300,15 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       const door = doorObj as Phaser.Physics.Arcade.Sprite;
-      const exit = this.currentLevel.exits.find(e =>
+      const exit = this.currentLevel.exits?.find(e =>
         Math.abs(e.x * 32 + 16 - door.x) < 24 && Math.abs(e.y * 32 + 16 - door.y) < 24);
-      if (exit) this.transitionToSection(exit);
+      if (exit) {
+        this.transitionToSection(exit);
+      } else if (!this.currentLevel.exits?.length) {
+        // Procedural floors use their generated exit tile as a one-way stair,
+        // rather than the bidirectional section-door table of authored maps.
+        this.advanceToNextLevel();
+      }
     });
 
     // Bullets vs Enemies → ranged damage
@@ -251,7 +318,7 @@ export class GameScene extends Phaser.Scene {
       const combatBullet = bullet as CombatProjectile;
       if (combatBullet.hitTargets?.has(enemy)) return;
       combatBullet.hitTargets?.add(enemy);
-      const dmg = (combatBullet.bulletDamage || 15) * this.comboManager.getDamageMultiplier();
+      const dmg = this.calculatePlayerDamage(combatBullet.bulletDamage || 15);
       enemy.takeDamage(dmg);
       this.comboManager.registerHit();
       if (combatBullet.piercingHits && combatBullet.piercingHits > 1) {
@@ -298,7 +365,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private damagePlayer(amount: number): void {
+    const healthBeforeDamage = this.player.hp;
     this.player.takeDamage(amount);
+    const appliedDamage = Math.max(0, healthBeforeDamage - this.player.hp);
+    if (appliedDamage > 0) {
+      this.simulationBridge.recordDamage(appliedDamage);
+    }
     this.playerDamageCooldown = 500;
     if (this.player.hp <= 0 && !this.isTransitioning) {
       this.isTransitioning = true;
@@ -308,6 +380,18 @@ export class GameScene extends Phaser.Scene {
       this.levelBannerText.setVisible(true);
       this.time.delayedCall(1500, () => this.scene.restart({ skipControls: true }));
     }
+  }
+
+  private calculatePlayerDamage(baseAmount: number, forcedType?: DamageType): number {
+    const classId = this.player.heroClass.id;
+    const damageType: DamageType = forcedType ?? (
+      classId === 'mage' ? 'arcane' : classId === 'rogue' ? 'shadow' : 'physical'
+    );
+    return this.combatBridge.calculatePlayerDamage(
+      baseAmount,
+      damageType,
+      this.comboManager.getDamageMultiplier(),
+    );
   }
 
   /** Find tile value 8 (spawn point) in the level map */
@@ -343,7 +427,9 @@ export class GameScene extends Phaser.Scene {
           const lava = this.add.image(posX, posY, 'tile_lava');
           this.floorImages.push(lava);
         } else if (tileVal === 5) {
-          this.stairTiles.create(posX, posY, 'tile_stairs');
+          // The tunnel is intentionally absent until the final enemy dies.
+          // Store its position without creating a visible/interactive sprite.
+          this.pendingExitTiles.push({ x: posX, y: posY });
         }
       }
     }
@@ -367,6 +453,7 @@ export class GameScene extends Phaser.Scene {
     const wave = this.waves[index];
     if (!wave) return;
     wave.enemies.forEach(e => this.spawnSingleEnemy(e));
+    this.simulationBridge.recordWaveStarted(this.currentLevel.name, index + 1, wave.enemies.length);
     if (this.levelBannerText) {
       this.levelBannerText.setText(`ONDA ${index + 1} / ${this.waves.length}`);
       this.levelBannerText.setVisible(true);
@@ -512,8 +599,10 @@ export class GameScene extends Phaser.Scene {
     SoundManager.playWitchTimeActivate();
 
     this.time.delayedCall(400, () => {
+      const previousSection = this.currentLevel.name;
       this.currentLevelIndex = exit.to;
       this.currentLevel = this.allLevels[this.currentLevelIndex];
+      this.simulationBridge.recordRoomEntered(this.currentLevel.name, previousSection);
 
       this.floorImages.forEach(img => img.destroy());
       this.floorImages = [];
@@ -523,6 +612,8 @@ export class GameScene extends Phaser.Scene {
       this.enemyBullets.clear(true, true);
       this.wallTiles.clear(true, true);
       this.stairTiles.clear(true, true);
+      this.pendingExitTiles = [];
+      this.exitsRevealed = false;
       this.summons.forEach(s => s.destroy());
       this.summons = [];
 
@@ -583,10 +674,13 @@ export class GameScene extends Phaser.Scene {
       this.summons = [];
       this.wallTiles.clear(true, true);
       this.stairTiles.clear(true, true);
+      this.pendingExitTiles = [];
+      this.exitsRevealed = false;
 
       // Rebuild map
       this.buildMapFromDefinition(this.currentLevel);
       this.spawnEnemiesAndItems(this.currentLevel);
+      this.spawnWave(0);
 
       // Reposition player at spawn
       const spawn = this.findSpawnPoint(this.currentLevel);
@@ -596,6 +690,11 @@ export class GameScene extends Phaser.Scene {
       this.player.setActive(true);
       this.player.setAlpha(1);
       this.player.resetResourcesForNextStage();
+
+      const worldWidth = this.currentLevel.tileMap[0].length * 32;
+      const worldHeight = this.currentLevel.tileMap.length * 32;
+      this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+      this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
       // Reset banner states
       this.levelClearedBannerShowing = false;
@@ -632,11 +731,29 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.player.combatInputEnabled = !this.shopUI.getIsVisible();
+    this.simulationBridge.setPaused(this.shopUI.getIsVisible() || this.isTransitioning);
     if (this.shopUI.getIsVisible()) return;
     if (this.isTransitioning) return;
 
+    this.simulationBridge.advance(delta);
+    this.combatBridge.advance(delta);
+
     // Update Player
     this.player.updatePlayer(time, delta);
+    this.simulationBridge.synchronizePlayer({
+      x: this.player.x,
+      y: this.player.y,
+      health: this.player.hp,
+      maximumHealth: this.player.maxHp,
+      mana: this.player.magic,
+      maximumMana: this.player.maxMagic,
+    });
+    this.combatBridge.synchronizePlayer(
+      this.player.hp,
+      this.player.maxHp,
+      this.player.magic,
+      this.player.maxMagic,
+    );
 
     // Witch Time slow-down
     const witchMultiplier = this.player.isWitchTimeActive ? 0.2 : 1.0;
@@ -662,10 +779,12 @@ export class GameScene extends Phaser.Scene {
     // Wave progression: when a wave is cleared, delay then spawn the next one
     if (activeEnemies.length === 0 && !this.waveTransition) {
       if (this.currentWaveIndex < this.waves.length - 1) {
+        this.simulationBridge.recordWaveCompleted(this.currentLevel.name, this.currentWaveIndex + 1);
         this.waveTransition = true;
         this.waveDelayTimer = 1200;
       } else if (!this.levelClearedBannerShowing) {
         this.levelClearedBannerShowing = true;
+        this.revealExits();
         this.levelBannerText.setText('CAMINHO LIBERADO!\nEncontre o portal dourado');
         this.levelBannerText.setVisible(true);
       }
@@ -691,7 +810,7 @@ export class GameScene extends Phaser.Scene {
           // Check if enemy is roughly in facing direction (dot product)
           const dot = (dx * this.player.facingX + dy * this.player.facingY);
           if (dot > -20) { // generous: hits in facing hemisphere
-            enemy.takeDamage(this.player.getMeleeDamage() * this.comboManager.getDamageMultiplier());
+            enemy.takeDamage(this.calculatePlayerDamage(this.player.getMeleeDamage()));
             this.comboManager.registerHit();
           }
         }
@@ -729,6 +848,26 @@ export class GameScene extends Phaser.Scene {
     this.objectiveText.setText(objective);
   }
 
+  private revealExits(): void {
+    if (this.exitsRevealed) return;
+    this.exitsRevealed = true;
+    this.pendingExitTiles.forEach(({ x, y }, index) => {
+      const tunnel = this.stairTiles.create(x, y, 'tile_stairs') as Phaser.Physics.Arcade.Sprite;
+      tunnel.setDepth(6).setAlpha(0).setScale(0.15);
+      tunnel.refreshBody();
+      this.tweens.add({
+        targets: tunnel,
+        alpha: 1,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 360,
+        delay: index * 70,
+        ease: 'Back.Out',
+        onUpdate: () => tunnel.refreshBody(),
+      });
+    });
+  }
+
   private updateArrowChargeBar(): void {
     if (this.player.heroClass.primaryStyle !== 'arrow' || !this.player.isChargingAttack()) return;
     const charge = this.player.getChargeRatio();
@@ -757,6 +896,7 @@ export class GameScene extends Phaser.Scene {
     this.controlsGuideOpen = true;
     this.player.combatInputEnabled = false;
     this.physics.world.pause();
+    this.simulationBridge.setPaused(true);
     const panel = this.add.container(640, 390).setScrollFactor(0).setDepth(990);
     const bg = this.add.rectangle(0, 0, 680, 330, 0x100b18, 0.96).setStrokeStyle(4, this.player.heroClass.accentColor);
     const title = this.add.text(0, -135, `${this.player.heroClass.name} — ${this.player.heroClass.title}`, {
@@ -780,6 +920,7 @@ export class GameScene extends Phaser.Scene {
       this.controlsGuideOpen = false;
       this.player.combatInputEnabled = true;
       this.physics.world.resume();
+      this.simulationBridge.setPaused(false);
     });
   }
 }

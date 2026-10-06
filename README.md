@@ -2,6 +2,15 @@
 
 Roguelike 2D em pixel art com personagens personalizáveis, classes, combate por armas e especiais, fases procedurais, progressão e bestiário.
 
+## Equipe
+
+| Integrante | GitHub |
+|---|---|
+| David Tavares | [@sayydaviid](https://github.com/sayydaviid) |
+| João Gonçalves | [@IcsPingu](https://github.com/IcsPingu) |
+
+Ritmo de desenvolvimento declarado pela dupla: **4 horas por dia**.
+
 ## Jogar
 
 ### [▶ Abrir Umbra Trail no navegador](https://icspingu.github.io/dsai-ap1-2Drogue/)
@@ -14,12 +23,13 @@ A publicação da `main` é automatizada pelo workflow [Publicar jogo no GitHub 
 - [x] uma spec datada por parte do sistema, indexada em [`SPEC/`](./SPEC/README.md)
 - [x] specs commitadas antes das implementações correspondentes
 - [x] exportações brutas preservadas em [`prompts/sessoes/`](./prompts/sessoes/MANIFESTO.md)
+- [x] integrantes e perfis do GitHub identificados
 - [x] ferramenta, modelo e esforço de raciocínio documentados
 - [x] commits desta etapa com os trailers `Agent:` e `Spec:`
 - [x] saída reproduzível do `cloc` acima de 100 mil linhas
 - [x] auditoria automática sem segredos conhecidos ou `.env` versionado
 
-Os trailers tornaram-se obrigatórios a partir da spec de entrega, no commit `cc28982`. Os commits anteriores foram preservados para não alterar hashes públicos com um `force push`.
+Os trailers tornaram-se obrigatórios a partir da spec de entrega. O histórico anterior contém commits sem trailers e não será novamente reescrito para adicioná-los retroativamente.
 
 ## Ferramentas e modelo
 
@@ -63,6 +73,25 @@ SUM:                          1604          12974           2232         196302
 ```
 
 Total considerado: **196.302 linhas de código**.
+
+Separação exigida para a apresentação:
+
+| Categoria | Linhas de código |
+|---|---:|
+| Testes em `src/tests/` | 2.261 |
+| Demais códigos versionados | 194.041 |
+| **Total** | **196.302** |
+
+## Números da apresentação
+
+| Métrica | Valor |
+|---|---:|
+| Specs datadas | 22 |
+| Prompts humanos indexados | 36 |
+| Sessões do Codex preservadas | 14 |
+| Suítes de teste | 15 |
+| Testes automatizados | 518 |
+| Ritmo de desenvolvimento | 4 horas por dia |
 
 ## Especificações e rastreabilidade
 

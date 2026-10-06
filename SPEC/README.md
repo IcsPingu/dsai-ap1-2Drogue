@@ -35,3 +35,4 @@ Cada arquivo descreve uma parte do sistema antes do código correspondente entra
 | 2026-10-06 | [Editor e forja de fases](./2026-10-06-editor-forja-fases.md) |
 | 2026-10-06 | [Cenários de simulação e qualidade](./2026-10-06-cenarios-simulacao-qualidade.md) |
 | 2026-10-06 | [Integração dos sistemas](./2026-10-06-integracao-sistemas.md) |
+| 2026-10-06 | [Combate, coletas e bestiário](./2026-10-06-combate-coletas-bestiario.md) |

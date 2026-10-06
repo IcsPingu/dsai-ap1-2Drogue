@@ -11,6 +11,7 @@ export type CombatProjectile = Phaser.Physics.Arcade.Sprite & {
 };
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
+  public static readonly SPAWN_PROTECTION_MS = 5000;
   public hp: number;
   public maxHp: number;
   public magic: number;
@@ -37,6 +38,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public facingY = 0;
   public bulletGroup?: Phaser.Physics.Arcade.Group;
   public combatInputEnabled = true;
+  private spawnProtectionRemaining = Player.SPAWN_PROTECTION_MS;
 
   private attackCooldown = 0;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -156,6 +158,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   public updatePlayer(_time: number, delta: number): void {
     if (!this.active || !this.body) return;
+    if (this.spawnProtectionRemaining > 0) {
+      this.spawnProtectionRemaining = Math.max(0, this.spawnProtectionRemaining - delta);
+      const pulse = Math.floor(this.spawnProtectionRemaining / 120) % 2 === 0;
+      this.setAlpha(pulse ? 1 : 0.58);
+      if (this.spawnProtectionRemaining === 0) this.setAlpha(1);
+    }
     if (!this.combatInputEnabled) this.chargeStartedAt = null;
     this.aimAtPointer(this.scene.input.activePointer);
     // Witch Time: attack cooldown drains faster and magic regenerates
@@ -658,8 +666,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     ++this.animationToken;
     this.archerBow?.hide();
     this.clearTint();
-    this.setAlpha(1);
+    this.startSpawnProtection();
     this.resetMovementPose();
+  }
+
+  public startSpawnProtection(durationMs = Player.SPAWN_PROTECTION_MS): void {
+    this.spawnProtectionRemaining = Math.max(0, durationMs);
+    this.setAlpha(1);
+  }
+
+  public isSpawnProtected(): boolean {
+    return this.spawnProtectionRemaining > 0;
+  }
+
+  public getSpawnProtectionSeconds(): number {
+    return Math.ceil(this.spawnProtectionRemaining / 1000);
   }
 
   private spawnDodgeAfterimage(delay: number): void {
@@ -718,6 +739,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   public takeDamage(_amount: number): void {
+    if (this.isSpawnProtected()) return;
     if (this.isDodging) {
       this.triggerWitchTime();
       return;

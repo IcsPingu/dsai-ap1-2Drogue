@@ -679,10 +679,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.spawnProtectionRemaining > 0;
   }
 
-  public getSpawnProtectionSeconds(): number {
-    return Math.ceil(this.spawnProtectionRemaining / 1000);
-  }
-
   private spawnDodgeAfterimage(delay: number): void {
     this.scene.time.delayedCall(delay, () => {
       if (!this.active || !this.isDodging) return;

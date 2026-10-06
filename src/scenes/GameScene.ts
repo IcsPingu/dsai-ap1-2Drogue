@@ -899,11 +899,7 @@ export class GameScene extends Phaser.Scene {
       `NÍVEL ${levelProgress.level}  XP ${levelProgress.current}/${levelProgress.required}  SP ${progressionSnapshot.skillPoints}`,
     );
     this.weaponHudText.setText(`${this.player.heroClass.name}: ${this.player.heroClass.weaponName}`);
-    if (this.player.isSpawnProtected()) {
-      this.weaponHudText.setText(
-        `${this.player.heroClass.name}: ${this.player.heroClass.weaponName}  INVENCÍVEL ${this.player.getSpawnProtectionSeconds()}s`,
-      );
-    } else if (this.player.shieldCharges > 0) {
+    if (this.player.shieldCharges > 0) {
       this.weaponHudText.setText(`${this.player.heroClass.name}: ${this.player.heroClass.weaponName}  ESCUDO x${this.player.shieldCharges}`);
     }
     const charge = this.player.getChargeRatio();

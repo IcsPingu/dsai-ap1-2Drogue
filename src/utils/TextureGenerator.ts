@@ -322,6 +322,32 @@ export class TextureGenerator {
       g.destroy();
     }
 
+    if (!tm.exists('item_heart')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      const outline = [
+        new Phaser.Geom.Point(12, 22), new Phaser.Geom.Point(3, 13),
+        new Phaser.Geom.Point(3, 7), new Phaser.Geom.Point(6, 4),
+        new Phaser.Geom.Point(10, 4), new Phaser.Geom.Point(12, 7),
+        new Phaser.Geom.Point(14, 4), new Phaser.Geom.Point(18, 4),
+        new Phaser.Geom.Point(21, 7), new Phaser.Geom.Point(21, 13),
+      ];
+      g.fillStyle(0x4d1021, 1);
+      g.fillPoints(outline, true, true);
+      const heart = [
+        new Phaser.Geom.Point(12, 19), new Phaser.Geom.Point(5, 12),
+        new Phaser.Geom.Point(5, 8), new Phaser.Geom.Point(7, 6),
+        new Phaser.Geom.Point(10, 6), new Phaser.Geom.Point(12, 9),
+        new Phaser.Geom.Point(14, 6), new Phaser.Geom.Point(17, 6),
+        new Phaser.Geom.Point(19, 8), new Phaser.Geom.Point(19, 12),
+      ];
+      g.fillStyle(0xf0445e, 1);
+      g.fillPoints(heart, true, true);
+      g.fillStyle(0xff9aac, 1);
+      g.fillRect(7, 7, 3, 3);
+      g.generateTexture('item_heart', 24, 24);
+      g.destroy();
+    }
+
     if (!tm.exists('item_halo')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
       g.lineStyle(3, 0xffd700, 1);

@@ -17,6 +17,7 @@ import {
   separation,
 } from '../ai';
 import { GeneratedTacticalDecision, GeneratedTacticalDirector } from '../ai/generated';
+import { shouldDropHeart } from '../utils/LootRules';
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private static nextAIId = 1;
@@ -110,6 +111,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const ox = (Math.random() - 0.5) * 24;
       const oy = (Math.random() - 0.5) * 24;
       this.scene.events.emit('enemyDropHalo', this.x + ox, this.y + oy);
+    }
+    if (shouldDropHeart(Math.random())) {
+      this.scene.events.emit('enemyDropHeart', this.x, this.y);
     }
     this.destroy();
   }

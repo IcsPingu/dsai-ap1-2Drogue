@@ -218,6 +218,20 @@ export class GameScene extends Phaser.Scene {
       const halo = new Item(this, x, y, 'item_halo', 'item_halo');
       this.items.add(halo);
     });
+    this.events.off('enemyDropHeart');
+    this.events.on('enemyDropHeart', (x: number, y: number) => {
+      const heart = new Item(this, x, y, 'item_potion', 'item_heart');
+      heart.setDepth(9);
+      this.items.add(heart);
+      this.tweens.add({
+        targets: heart,
+        y: y - 6,
+        duration: 420,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.InOut',
+      });
+    });
     this.events.off('enemyDefeated');
     this.events.on('enemyDefeated', (defeat: EnemyDefeatProgress) => {
       const update = this.progression.recordEnemyDefeat(defeat);
@@ -292,7 +306,7 @@ export class GameScene extends Phaser.Scene {
       if (itm.itemType === 'item_halo') {
         this.player.addHalos(100);
       } else if (itm.itemType === 'item_potion') {
-        this.player.heal(40);
+        this.player.heal(20);
       } else if (itm.itemType === 'item_magic') {
         this.player.addMagic(25);
       } else if (itm.itemType === 'item_key') {
@@ -535,7 +549,7 @@ export class GameScene extends Phaser.Scene {
       const isMagic = itm.type === 'mana_shard';
       const isKey = itm.type === 'key';
       const itemType = isHealth ? 'item_potion' : isMagic ? 'item_magic' : isKey ? 'item_key' : 'item_halo';
-      const textureKey = isMagic ? 'item_potion' : itemType;
+      const textureKey = isHealth ? 'item_heart' : isMagic ? 'item_potion' : itemType;
       const itemEntity = new Item(this, px, py, itemType, textureKey);
       this.items.add(itemEntity);
     });

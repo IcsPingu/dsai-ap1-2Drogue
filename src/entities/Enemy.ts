@@ -57,6 +57,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private tacticalElapsed = 0;
   private aiHome: NavPoint;
   private progressionDifficulty = 1;
+  private appearanceTint?: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, textureKey: string = 'enemy_affinity') {
     super(scene, x, y, textureKey);
@@ -87,7 +88,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.playEnemyAction('hurt');
     this.setTint(0xff0000);
     this.scene.time.delayedCall(150, () => {
-      this.clearTint();
+      this.restoreAppearanceTint();
     });
 
     if (this.hp <= 0) {
@@ -145,6 +146,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this;
   }
 
+  public configureAppearance(tint: number): this {
+    this.appearanceTint = tint;
+    this.setTint(tint);
+    return this;
+  }
+
+  protected restoreAppearanceTint(): void {
+    if (this.appearanceTint === undefined) this.clearTint();
+    else this.setTint(this.appearanceTint);
+  }
+
   /** Nearby positions are supplied once per frame for inexpensive separation. */
   public setCrowdNeighbors(neighbors: readonly NavPoint[]): void {
     this.crowdNeighbors = neighbors.map((point) => ({ ...point }));
@@ -179,7 +191,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.strikeDirX = dx / dist;
           this.strikeDirY = dy / dist;
         }
-        this.clearTint();
+        this.restoreAppearanceTint();
         this.playEnemyAction('attack');
       }
       return;

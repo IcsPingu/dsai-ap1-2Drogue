@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { ALL_ENEMIES, EnemyDefinition } from '../data/EnemyDatabase';
 import { CLASS_DATABASE, PLAYER_CLASS_ORDER } from '../data/ClassDatabase';
 import { WEAPON_DATABASE, WeaponDefinition } from '../data/WeaponDatabase';
+import { ENEMY_PRESENTATIONS, IMPLEMENTED_ENEMY_IDS } from '../data/EnemyPresentation';
 
 type Tab = 'mobs' | 'players' | 'weapons';
 
@@ -12,6 +12,7 @@ interface CatalogEntry {
   lore?: string;
   iconKey?: string;
   iconFrame?: number;
+  tint?: number;
 }
 
 export class CatalogScene extends Phaser.Scene {
@@ -56,20 +57,18 @@ export class CatalogScene extends Phaser.Scene {
 
   private getEntries(): CatalogEntry[] {
     if (this.tab === 'mobs') {
-      // Only enemies with a runtime class are shown — the catalogue should be truthful
-      const IMPLEMENTED_IDS = new Set(['affinity', 'applaud', 'fortitudo']);
-      return ALL_ENEMIES.filter(e => IMPLEMENTED_IDS.has(e.id)).map((e: EnemyDefinition) => ({
-        name: e.name,
-        subtitle: e.title,
-        description: e.description,
-        lore: e.lore,
-        iconKey: e.name.toLowerCase().includes('joy') || e.name.toLowerCase().includes('harmony')
-          ? 'enemy_ranged_anim'
-          : e.name.toLowerCase().includes('fortitude') || e.name.toLowerCase().includes('jubileu')
-            ? 'boss_guardian_anim'
-            : 'enemy_melee_anim',
+      return IMPLEMENTED_ENEMY_IDS.map(id => {
+        const enemy = ENEMY_PRESENTATIONS[id];
+        return {
+        name: enemy.name,
+        subtitle: enemy.title,
+        description: enemy.description,
+        lore: enemy.lore,
+        iconKey: enemy.textureKey,
         iconFrame: 0,
-      }));
+        tint: enemy.tint,
+        };
+      });
     }
     if (this.tab === 'players') {
       return PLAYER_CLASS_ORDER.map(id => {
@@ -107,6 +106,7 @@ export class CatalogScene extends Phaser.Scene {
       }).setOrigin(0, 0.5);
       if (entry.iconKey) {
         const icon = this.add.image(32, y, entry.iconKey, entry.iconFrame).setDisplaySize(28, 28);
+        if (entry.tint !== undefined) icon.setTint(entry.tint);
         this.rows.push(icon);
       }
       rowBg.on('pointerover', () => rowBg.setFillStyle(0x3d2a48));
@@ -123,6 +123,7 @@ export class CatalogScene extends Phaser.Scene {
     group.add(bg);
     if (entry.iconKey) {
       const big = this.add.image(285, 90, entry.iconKey, entry.iconFrame).setDisplaySize(110, 110);
+      if (entry.tint !== undefined) big.setTint(entry.tint);
       group.add(big);
     }
     const title = this.add.text(285, 165, entry.name, {

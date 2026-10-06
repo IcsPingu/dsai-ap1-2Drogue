@@ -40,7 +40,7 @@ export class RangedEnemy extends Enemy {
       // Back away
       if (this.windupTimer > 0) {
         this.windupTimer = 0;
-        this.clearTint();
+        this.restoreAppearanceTint();
       }
       this.moveUsingNavigation(this.retreatTarget(playerX, playerY, 175), delta, this.speed * 1.15 * speedMultiplier);
     } else if (decision.wantsAttack && decision.targetVisible) {
@@ -57,7 +57,7 @@ export class RangedEnemy extends Enemy {
       if (this.windupTimer > 0) {
         this.windupTimer -= delta;
         if (this.windupTimer <= 0) {
-          this.clearTint();
+          this.restoreAppearanceTint();
           this.shotCount++;
           // Every 3rd shot is a spread of 3 arrows to control space
           if (this.shotCount % 3 === 0) {
@@ -73,7 +73,7 @@ export class RangedEnemy extends Enemy {
       // and inside the ranged attack band.
       if (this.windupTimer > 0) {
         this.windupTimer = 0;
-        this.clearTint();
+        this.restoreAppearanceTint();
       }
       this.moveUsingNavigation(decision.moveTarget, delta, this.speed * speedMultiplier);
     } else {

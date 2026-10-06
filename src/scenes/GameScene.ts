@@ -24,6 +24,7 @@ import { PresetId, ProceduralLevelFactory } from '../procedural';
 import { DamageType, GameCombatBridge } from '../combat';
 import { NavigationService } from '../ai';
 import { EnemyDefeatProgress, ProgressionService } from '../progression';
+import { ENEMY_PRESENTATIONS } from '../data/EnemyPresentation';
 
 interface GameSceneInitData {
   skipControls?: boolean;
@@ -506,12 +507,16 @@ export class GameScene extends Phaser.Scene {
     let enemy: Enemy;
     if (e.type === 'ranged' || e.type === 'applaud') {
       enemy = new RangedEnemy(this, px, py, this.enemyBullets);
+      enemy.configureAppearance(ENEMY_PRESENTATIONS.applaud.tint);
     } else if (e.type === 'boss' || e.type === 'fortitudo') {
       enemy = new BossEnemy(this, px, py, 'Fortitudo');
+      enemy.configureAppearance(ENEMY_PRESENTATIONS.fortitudo.tint);
     } else if (e.type === 'miniboss') {
       enemy = new BossEnemy(this, px, py, 'Sevido', 'boss_guardian_anim', 700, 0.6);
+      enemy.configureAppearance(0xc07cff);
     } else {
       enemy = new Enemy(this, px, py, 'enemy_melee_anim');
+      enemy.configureAppearance(ENEMY_PRESENTATIONS.affinity.tint);
     }
     const patrol = (e.patrol ?? []).map((point) => ({ x: point.x * 32 + 16, y: point.y * 32 + 16 }));
     enemy.configureAI(this.navigation, patrol);

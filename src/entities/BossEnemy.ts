@@ -28,7 +28,7 @@ export class BossEnemy extends Enemy {
     if (this.phase === 1 && this.hp < this.maxHp * 0.5) {
       this.phase = 2;
       this.speed = 70;
-      this.setTint(0xff6600);
+      this.configureAppearance(0xff432f);
     }
   }
 }

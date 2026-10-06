@@ -48,7 +48,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private keyD?: Phaser.Input.Keyboard.Key;
   private keyAttack?: Phaser.Input.Keyboard.Key;
   private keyDodge?: Phaser.Input.Keyboard.Key;
-  private keyKickButton?: Phaser.Input.Keyboard.Key;
+  private keyUltimate?: Phaser.Input.Keyboard.Key;
   private baseScaleX = 1;
   private baseScaleY = 1;
   private readonly animationPrefix: string;
@@ -63,10 +63,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private archerBow?: ArcherBow;
   private bowReleaseUntil = 0;
   private bowReleaseAngle = 0;
+  private primaryHeld = false;
 
   private static readonly MAX_CHARGE_MS = 1100;
   private static readonly ROGUE_THROW_THRESHOLD_MS = 220;
   private static readonly MAGIC_BOLT_RANGE = 455;
+  public static readonly MAGIC_BOLT_COST = 4;
 
   constructor(
     scene: Phaser.Scene,
@@ -105,7 +107,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.keyD = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
       this.keyAttack = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
       this.keyDodge = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.keyKickButton = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
+      this.keyUltimate = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
     }
     scene.input.on('pointerdown', this.handlePointerDown, this);
     scene.input.on('pointerup', this.handlePointerUp, this);
@@ -121,8 +123,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.combatInputEnabled || currentlyOver.length > 0) return;
     this.aimAtPointer(pointer);
     if (pointer.rightButtonDown()) {
-      // Right MB = Kick combo input (replaces the old special burst)
-      this.executeAttack('K');
+      this.useUltimate();
     }
     else if (pointer.leftButtonDown()) {
       if (this.heroClass.primaryStyle === 'arrow' || this.heroClass.primaryStyle === 'daggers') {
@@ -130,14 +131,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           this.chargeStartedAt = this.scene.time.now;
           this.updateBowChargePose();
         }
+      } else if (this.heroClass.primaryStyle === 'orb') {
+        this.primaryHeld = true;
+        this.usePrimaryWeapon();
       } else {
-        this.executeAttack('P');
+        this.usePrimaryWeapon();
       }
     }
   }
 
   private handlePointerUp(pointer: Phaser.Input.Pointer): void {
     if (pointer.button !== 0) return;
+    this.primaryHeld = false;
     if (pointer.button === 0 && this.heroClass.primaryStyle !== 'arrow' && this.heroClass.primaryStyle !== 'daggers') {
       // Melee/orb already fired the punch on press
       this.chargeStartedAt = null;
@@ -164,10 +169,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setAlpha(pulse ? 1 : 0.58);
       if (this.spawnProtectionRemaining === 0) this.setAlpha(1);
     }
-    if (!this.combatInputEnabled) this.chargeStartedAt = null;
+    if (!this.combatInputEnabled) {
+      this.chargeStartedAt = null;
+      this.primaryHeld = false;
+    }
     this.aimAtPointer(this.scene.input.activePointer);
     // Witch Time: attack cooldown drains faster and magic regenerates
     this.attackCooldown = Math.max(0, this.attackCooldown - delta * (this.isWitchTimeActive ? 2.5 : 1));
+    if (this.primaryHeld && this.heroClass.primaryStyle === 'orb' && this.combatInputEnabled && !this.isDodging) {
+      this.usePrimaryWeapon();
+    }
     if (this.isWitchTimeActive) this.addMagic(delta * 0.02);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - delta);
     this.footstepEffectCooldown = Math.max(0, this.footstepEffectCooldown - delta);
@@ -241,7 +252,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.footstepEffectCooldown = 155;
     }
     if (this.keyAttack && Phaser.Input.Keyboard.JustDown(this.keyAttack)) this.usePrimaryWeapon();
-    if (this.keyKickButton && Phaser.Input.Keyboard.JustDown(this.keyKickButton)) this.executeAttack('K');
+    if (this.keyUltimate && Phaser.Input.Keyboard.JustDown(this.keyUltimate)) this.useUltimate();
   }
 
   private faceMovement(directionX: number): void {
@@ -298,11 +309,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private usePrimaryWeapon(): void {
+    if (this.heroClass.primaryStyle === 'orb') {
+      this.performPrimaryAttack(0, false, false);
+      return;
+    }
     this.executeAttack('P');
   }
 
-  /** Bayonetta-style combat input: 'P' = punch (left MB), 'K' = kick (right MB). */
+  /** Compatibility entry point: P attacks; K now invokes the class ultimate. */
   public executeAttack(input: 'P' | 'K', charge = 0, throwDagger = false): void {
+    if (input === 'K') {
+      this.useUltimate();
+      return;
+    }
     // Animation lockout: an attack must play out before the next one can start.
     // Early presses are buffered so combos can be chained fluidly.
     if (this.comboInputLock > 0) {
@@ -324,55 +343,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.comboSequence.push(input);
     this.comboTimer = 0;
 
-    // Combo finishers: last three/four inputs match a known pattern within the window
-    const seqStr = this.comboSequence.join('');
-    const last3 = seqStr.slice(-3);
-    const last4 = seqStr.slice(-4);
-    const WITCH_COMBOS = ['PPK', 'KPK', 'PKP', 'KKP', 'PKK'];
-
-    // Empowered summon finisher: four punches
-    if (this.comboSequence.length >= 4 && last4 === 'PPPP') {
-      this.comboSequence = [];
-      this.comboWindowStart = null;
-      this.comboInputLock = 620;
-      if (this.magic >= this.heroClass.magicCost) {
-        this.magic -= this.heroClass.magicCost;
-        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id, 'empowered');
-      }
-      SoundManager.playWickedWeave();
-      this.spawnSpecialRing(this.heroClass.accentColor);
-      this.performPrimaryAttack(0, false, false);
-      return;
-    }
-
-    // Witch Combo finisher: last three inputs match a known pattern within the window
-    if (this.comboSequence.length >= 3 && WITCH_COMBOS.includes(last3)) {
-      this.comboSequence = [];
-      this.comboWindowStart = null;
-      this.comboInputLock = 620;
-      if (this.magic >= this.heroClass.magicCost) {
-        this.magic -= this.heroClass.magicCost;
-        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id, 'normal');
-      }
-      SoundManager.playWickedWeave();
-      this.spawnSpecialRing(this.heroClass.accentColor);
-      // The finisher hit still goes out — it is not a cancel
-      if (input === 'K') this.performPrimaryAttack(0, false, true);
-      else this.performPrimaryAttack(charge, throwDagger, false);
-      return;
-    }
-
-    this.comboInputLock = input === 'P' ? 220 : 330;
-    if (input === 'P') {
-      this.performPrimaryAttack(charge, throwDagger, false);
-    } else {
-      this.performPrimaryAttack(0, false, true);
-    }
+    this.comboInputLock = 220;
+    this.performPrimaryAttack(charge, throwDagger, false);
   }
 
   private performPrimaryAttack(charge: number, throwDagger: boolean, isKick: boolean): void {
     if (this.attackCooldown > 0) return;
+    if (this.heroClass.primaryStyle === 'orb' && this.magic < Player.MAGIC_BOLT_COST) return;
     this.attackCooldown = this.heroClass.attackCooldown * (isKick ? 1.4 : 1);
+    if (this.heroClass.primaryStyle === 'orb') this.magic -= Player.MAGIC_BOLT_COST;
     this.lastAttackKick = isKick;
     this.comboTimer = 0;
     this.playSpriteAction('attack');
@@ -408,12 +387,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.fireProjectile(0, damage, speed, lifetime, Phaser.Math.Linear(0.85, 1.25, charge) * (isKick ? 1.25 : 1), false, 0, aimAngle, isKick);
       SoundManager.playGunshot();
     }
-    this.addMagic(5);
+    if (this.heroClass.primaryStyle !== 'orb') this.addMagic(5);
   }
 
-  private fireSpecial(): void {
-    // Special burst is triggered via the Witch Time hold-button path instead.
-    // Kept as a no-op hook for future secondary specials.
+  public useUltimate(): boolean {
+    if (!this.combatInputEnabled || this.isDodging || this.magic < this.heroClass.magicCost) return false;
+    this.magic -= this.heroClass.magicCost;
+    this.comboSequence = [];
+    this.comboWindowStart = null;
+    this.comboInputLock = 620;
+    this.primaryHeld = false;
+    this.chargeStartedAt = null;
+    this.playSpecialAnimation();
+    this.spawnSpecialRing(this.heroClass.accentColor);
+    SoundManager.playWickedWeave();
+    this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id, 'normal');
+    return true;
   }
 
   private fireProjectile(
@@ -654,6 +643,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.isShadowActive = false;
     this.isDodging = false;
     this.chargeStartedAt = null;
+    this.primaryHeld = false;
     this.bowReleaseUntil = 0;
     this.attackCooldown = 0;
     this.dodgeCooldown = 0;

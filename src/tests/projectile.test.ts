@@ -288,6 +288,7 @@ test('mage launches immediately toward the aim while retaining cooldown and rang
   Object.assign(player, {
     active: true,
     heroClass: CLASS_DATABASE.mage,
+    magic: 12,
     attackCooldown: 0,
     comboSequence: [],
     facingX: 0,
@@ -309,6 +310,7 @@ test('mage launches immediately toward the aim while retaining cooldown and rang
   expect(speed).toBeGreaterThan(350);
   expect(speed * lifetime / 1000).toBeCloseTo(455);
   expect(angle).toBeCloseTo(-Math.PI / 2);
+  expect(player.magic).toBe(8);
 
   player['usePrimaryWeapon']();
   expect(fireProjectile).toHaveBeenCalledTimes(1);
@@ -316,6 +318,113 @@ test('mage launches immediately toward the aim while retaining cooldown and rang
   player['comboInputLock'] = 0;
   player['usePrimaryWeapon']();
   expect(fireProjectile).toHaveBeenCalledTimes(2);
+  expect(player.magic).toBe(4);
+  player['attackCooldown'] = 0;
+  player['comboInputLock'] = 0;
+  player['usePrimaryWeapon']();
+  expect(fireProjectile).toHaveBeenCalledTimes(3);
+  expect(player.magic).toBe(0);
+  player['attackCooldown'] = 0;
+  player['usePrimaryWeapon']();
+  expect(fireProjectile).toHaveBeenCalledTimes(3);
+});
+
+test('holding the mage primary keeps the firing state until mouse release', () => {
+  const usePrimaryWeapon = jest.fn();
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    active: true,
+    combatInputEnabled: true,
+    heroClass: CLASS_DATABASE.mage,
+    primaryHeld: false,
+    scene: { cameras: { main: {} } },
+    aimAtPointer: jest.fn(),
+    usePrimaryWeapon,
+  });
+  const pointer = {
+    button: 0,
+    rightButtonDown: () => false,
+    leftButtonDown: () => true,
+  } as unknown as Parameters<Player['handlePointerDown']>[0];
+
+  player['handlePointerDown'](pointer, []);
+  expect(player['primaryHeld']).toBe(true);
+  expect(usePrimaryWeapon).toHaveBeenCalledTimes(1);
+  player['handlePointerUp'](pointer);
+  expect(player['primaryHeld']).toBe(false);
+});
+
+test('right mouse invokes only the class ultimate', () => {
+  const useUltimate = jest.fn();
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    combatInputEnabled: true,
+    scene: { cameras: { main: {} } },
+    aimAtPointer: jest.fn(),
+    useUltimate,
+    executeAttack: jest.fn(),
+  });
+  const pointer = {
+    button: 2,
+    rightButtonDown: () => true,
+    leftButtonDown: () => false,
+  } as unknown as Parameters<Player['handlePointerDown']>[0];
+
+  player['handlePointerDown'](pointer, []);
+  expect(useUltimate).toHaveBeenCalledTimes(1);
+  expect(player.executeAttack).not.toHaveBeenCalled();
+});
+
+test('ultimate consumes its mana once and emits the summon once', () => {
+  jest.spyOn(SoundManager, 'playWickedWeave').mockImplementation(() => {});
+  const emit = jest.fn();
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    x: 30,
+    y: 40,
+    combatInputEnabled: true,
+    isDodging: false,
+    magic: CLASS_DATABASE.knight.magicCost,
+    heroClass: CLASS_DATABASE.knight,
+    comboSequence: ['P'],
+    primaryHeld: false,
+    chargeStartedAt: null,
+    scene: { events: { emit } },
+    playSpecialAnimation: jest.fn(),
+    spawnSpecialRing: jest.fn(),
+  });
+
+  expect(player.useUltimate()).toBe(true);
+  expect(player.magic).toBe(0);
+  expect(emit).toHaveBeenCalledTimes(1);
+  expect(emit).toHaveBeenCalledWith('playerSummon', 30, 40, 'knight', 'normal');
+  expect(player.useUltimate()).toBe(false);
+  expect(emit).toHaveBeenCalledTimes(1);
+});
+
+test('charging the rogue knife increases its travel distance', () => {
+  jest.spyOn(SoundManager, 'playSwordSlash').mockImplementation(() => {});
+  const fireProjectile = jest.fn();
+  const player = Object.create(Player.prototype) as Player;
+  Object.assign(player, {
+    active: true,
+    heroClass: CLASS_DATABASE.rogue,
+    attackCooldown: 0,
+    facingX: 1,
+    facingY: 0,
+    scene: { time: { delayedCall: (_delay: number, callback: () => void) => callback() } },
+    playSpriteAction: jest.fn(),
+    playPrimaryAnimation: jest.fn(),
+    fireProjectile,
+    addMagic: jest.fn(),
+  });
+
+  player['performPrimaryAttack'](0, true, false);
+  player['attackCooldown'] = 0;
+  player['performPrimaryAttack'](1, true, false);
+  const shortDistance = fireProjectile.mock.calls[0][2] * fireProjectile.mock.calls[0][3] / 1000;
+  const longDistance = fireProjectile.mock.calls[1][2] * fireProjectile.mock.calls[1][3] / 1000;
+  expect(longDistance).toBeGreaterThan(shortDistance);
 });
 
 test('starting a new stage restores health and mana but preserves collected coins', () => {

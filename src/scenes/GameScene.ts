@@ -1002,7 +1002,7 @@ export class GameScene extends Phaser.Scene {
       wordWrap: { width: 610 },
     }).setOrigin(0.5);
     const commands = this.add.text(0, 15,
-      'WASD / SETAS   MOVER\nMOUSE           MIRAR\nBOTÃO ESQUERDO  ATACAR (PUNCH / CARREGAR)\nBOTÃO DIREITO   CHUTE (KICK)\nJ               ATACAR   •   K CHUTE\nESPAÇO          ESQUIVAR E ATRAVESSAR INIMIGOS\nCOMBOS P/K      PPK/KPK = INVOCAÇÃO\nB               LOJA   •   ESC MENU', {
+      'WASD / SETAS   MOVER\nMOUSE           MIRAR\nBOTÃO ESQUERDO  ATACAR / SEGURAR\nBOTÃO DIREITO   ULTIMATE\nJ               ATACAR   •   K ULTIMATE\nESPAÇO          ESQUIVAR E ATRAVESSAR INIMIGOS\nMAGA            SEGURE PARA DISPARAR ATÉ A MANA ACABAR\nLADINO          SEGURE PARA AUMENTAR O ALCANCE DA FACA\nB               LOJA   •   ESC MENU', {
       fontFamily: 'Courier New, monospace', fontSize: '18px', color: '#ffffff', lineSpacing: 8, align: 'left',
     }).setOrigin(0.5);
     const hint = this.add.text(0, 140, 'CLIQUE PARA COMEÇAR', {

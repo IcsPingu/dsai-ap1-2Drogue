@@ -358,6 +358,103 @@ export class TextureGenerator {
       g.destroy();
     }
 
+    if (!tm.exists('weapon_scarborough_fair')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x2a193b, 1);
+      g.fillRoundedRect(5, 14, 34, 11, 3);
+      g.fillRect(28, 22, 9, 19);
+      g.fillStyle(0xf0c74b, 1);
+      g.fillRect(8, 17, 29, 4);
+      g.fillRect(31, 24, 4, 13);
+      g.fillStyle(0x6f1f4c, 1);
+      g.fillRoundedRect(25, 39, 34, 11, 3);
+      g.fillRect(27, 47, 9, 13);
+      g.fillStyle(0xff6a9b, 1);
+      g.fillRect(28, 42, 28, 4);
+      g.fillRect(29, 48, 4, 10);
+      g.generateTexture('weapon_scarborough_fair', 64, 64);
+      g.destroy();
+    }
+
+    if (!tm.exists('weapon_shuraba')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xf3e9dc, 1);
+      g.fillTriangle(12, 52, 47, 9, 54, 5);
+      g.fillTriangle(12, 52, 48, 16, 47, 9);
+      g.fillStyle(0xff4169, 1);
+      g.fillTriangle(18, 48, 48, 14, 44, 23);
+      g.fillStyle(0xe8b84a, 1);
+      g.fillRoundedRect(10, 46, 18, 5, 2);
+      g.fillStyle(0x321426, 1);
+      g.fillRoundedRect(4, 50, 15, 8, 2);
+      g.generateTexture('weapon_shuraba', 64, 64);
+      g.destroy();
+    }
+
+    if (!tm.exists('weapon_kulshedra')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.lineStyle(6, 0x37164d, 1);
+      g.beginPath();
+      g.moveTo(13, 53);
+      g.lineTo(22, 43);
+      g.lineTo(38, 46);
+      g.lineTo(52, 37);
+      g.lineTo(54, 23);
+      g.lineTo(44, 12);
+      g.lineTo(29, 11);
+      g.strokePath();
+      g.lineStyle(3, 0xc265ff, 1);
+      g.beginPath();
+      g.moveTo(14, 51);
+      g.lineTo(23, 42);
+      g.lineTo(38, 45);
+      g.lineTo(50, 36);
+      g.lineTo(51, 24);
+      g.lineTo(43, 15);
+      g.lineTo(30, 14);
+      g.strokePath();
+      g.fillStyle(0xe4c56a, 1);
+      g.fillRoundedRect(6, 49, 14, 9, 3);
+      g.generateTexture('weapon_kulshedra', 64, 64);
+      g.destroy();
+    }
+
+    if (!tm.exists('weapon_durga')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x4b1e20, 1);
+      g.fillRoundedRect(7, 30, 20, 22, 5);
+      g.fillStyle(0xff6a24, 1);
+      g.fillTriangle(7, 33, 10, 8, 15, 33);
+      g.fillTriangle(14, 31, 20, 5, 21, 34);
+      g.fillTriangle(21, 34, 29, 13, 27, 39);
+      g.fillStyle(0x173c5c, 1);
+      g.fillRoundedRect(37, 30, 20, 22, 5);
+      g.fillStyle(0x65dcff, 1);
+      g.fillTriangle(37, 39, 35, 13, 43, 34);
+      g.fillTriangle(43, 34, 44, 5, 50, 31);
+      g.fillTriangle(50, 33, 55, 8, 57, 33);
+      g.generateTexture('weapon_durga', 64, 64);
+      g.destroy();
+    }
+
+    if (!tm.exists('weapon_kilgore')) {
+      const g = scene.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x263326, 1);
+      g.fillRoundedRect(7, 20, 47, 23, 5);
+      g.fillStyle(0x92b84c, 1);
+      g.fillRect(12, 24, 35, 7);
+      g.fillStyle(0x141916, 1);
+      g.fillCircle(51, 31, 10);
+      g.fillStyle(0xd8e58c, 1);
+      g.fillCircle(51, 31, 5);
+      g.fillStyle(0x38483a, 1);
+      g.fillRoundedRect(19, 41, 13, 15, 3);
+      g.fillStyle(0xff8b2c, 1);
+      g.fillTriangle(7, 25, 7, 39, 0, 32);
+      g.generateTexture('weapon_kilgore', 64, 64);
+      g.destroy();
+    }
+
     if (!tm.exists('item_chest')) {
       const g = scene.make.graphics({ x: 0, y: 0 });
       g.fillStyle(0x8b4513, 1);

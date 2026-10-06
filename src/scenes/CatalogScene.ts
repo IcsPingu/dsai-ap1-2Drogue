@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CLASS_DATABASE, PLAYER_CLASS_ORDER } from '../data/ClassDatabase';
 import { WEAPON_DATABASE, WeaponDefinition } from '../data/WeaponDatabase';
 import { ENEMY_PRESENTATIONS, IMPLEMENTED_ENEMY_IDS } from '../data/EnemyPresentation';
+import { getWeaponPresentation } from '../data/WeaponPresentation';
 
 type Tab = 'mobs' | 'players' | 'weapons';
 
@@ -60,13 +61,13 @@ export class CatalogScene extends Phaser.Scene {
       return IMPLEMENTED_ENEMY_IDS.map(id => {
         const enemy = ENEMY_PRESENTATIONS[id];
         return {
-        name: enemy.name,
-        subtitle: enemy.title,
-        description: enemy.description,
-        lore: enemy.lore,
-        iconKey: enemy.textureKey,
-        iconFrame: 0,
-        tint: enemy.tint,
+          name: enemy.name,
+          subtitle: enemy.title,
+          description: enemy.description,
+          lore: enemy.lore,
+          iconKey: enemy.textureKey,
+          iconFrame: 0,
+          tint: enemy.tint,
         };
       });
     }
@@ -81,13 +82,16 @@ export class CatalogScene extends Phaser.Scene {
         };
       });
     }
-    return Object.values(WEAPON_DATABASE).map((w: WeaponDefinition) => ({
-      name: w.name,
-      subtitle: `${w.title} — ${w.category}`,
-      description: `${w.description}\n\nDano base: ${w.baseDamage} | Nível: ${w.requiredLevel} | Preço: ${w.price}⏣`,
-      lore: w.lore,
-      iconKey: 'item_halo',
-    }));
+    return Object.values(WEAPON_DATABASE).map((w: WeaponDefinition) => {
+      const presentation = getWeaponPresentation(w);
+      return {
+        name: presentation.name,
+        subtitle: `${presentation.title} — ${presentation.category}`,
+        description: `${presentation.description}\n\nDano base: ${w.baseDamage} | Nível necessário: ${w.requiredLevel} | Preço: ${w.price} ⏣`,
+        lore: presentation.lore,
+        iconKey: presentation.iconKey,
+      };
+    });
   }
 
   private renderRows(): void {

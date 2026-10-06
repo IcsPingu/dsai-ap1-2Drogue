@@ -13,6 +13,8 @@ export class RangedEnemy extends Enemy {
   constructor(scene: Phaser.Scene, x: number, y: number, projectileGroup?: Phaser.Physics.Arcade.Group) {
     super(scene, x, y, 'enemy_ranged_anim');
     this.projectileGroup = projectileGroup;
+    this.enemyRole = 'ranged';
+    this.enemyType = 'applaud';
     this.speed = 90;
     this.hp = 130;
     this.maxHp = 130;
@@ -28,20 +30,20 @@ export class RangedEnemy extends Enemy {
     const dx = playerX - this.x;
     const dy = playerY - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    const decision = this.think(playerX, playerY, delta);
 
     // Keep distance and shoot
     if (dist < 1) {
       this.setVelocity(0, 0);
       this.updateMovementAnimation(false);
-    } else if (dist < 180) {
+    } else if (decision.wantsRetreat || (decision.targetVisible && dist < 180)) {
       // Back away
       if (this.windupTimer > 0) {
         this.windupTimer = 0;
         this.clearTint();
       }
-      this.setVelocity((-dx / dist) * this.speed * speedMultiplier, (-dy / dist) * this.speed * speedMultiplier);
-      this.updateMovementAnimation(true);
-    } else if (dist < 350) {
+      this.moveUsingNavigation(this.retreatTarget(playerX, playerY, 175), delta, this.speed * 1.15 * speedMultiplier);
+    } else if (decision.wantsAttack && decision.targetVisible) {
       // Hold position and shoot
       this.setVelocity(0, 0);
       this.updateMovementAnimation(false);
@@ -66,14 +68,17 @@ export class RangedEnemy extends Enemy {
           this.shootCooldown = 2000; // 2 sec cooldown
         }
       }
-    } else {
-      // Approach
+    } else if (decision.moveTarget) {
+      // Reposition through the navigation graph until the target is visible
+      // and inside the ranged attack band.
       if (this.windupTimer > 0) {
         this.windupTimer = 0;
         this.clearTint();
       }
-      this.setVelocity((dx / dist) * this.speed * speedMultiplier, (dy / dist) * this.speed * speedMultiplier);
-      this.updateMovementAnimation(true);
+      this.moveUsingNavigation(decision.moveTarget, delta, this.speed * speedMultiplier);
+    } else {
+      this.setVelocity(0, 0);
+      this.updateMovementAnimation(false);
     }
   }
 

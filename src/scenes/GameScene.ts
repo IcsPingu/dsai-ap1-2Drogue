@@ -22,6 +22,8 @@ import { ComboManager } from '../managers/ComboManager';
 import { GameSimulationBridge } from '../simulation';
 import { PresetId, ProceduralLevelFactory } from '../procedural';
 import { DamageType, GameCombatBridge } from '../combat';
+import { NavigationService } from '../ai';
+import { EnemyDefeatProgress, ProgressionService } from '../progression';
 
 interface GameSceneInitData {
   skipControls?: boolean;
@@ -75,6 +77,7 @@ export class GameScene extends Phaser.Scene {
   private hpHudText!: Phaser.GameObjects.Text;
   private magicHudText!: Phaser.GameObjects.Text;
   private haloHudText!: Phaser.GameObjects.Text;
+  private progressionHudText!: Phaser.GameObjects.Text;
   private weaponHudText!: Phaser.GameObjects.Text;
   private comboHudText!: Phaser.GameObjects.Text;
   private comboManager!: ComboManager;
@@ -96,6 +99,8 @@ export class GameScene extends Phaser.Scene {
   private dodgeHitTargets = new Set<Enemy>();
   private simulationBridge!: GameSimulationBridge;
   private combatBridge!: GameCombatBridge;
+  private navigation!: NavigationService;
+  private progression!: ProgressionService;
 
   constructor() {
     super('GameScene');
@@ -148,6 +153,8 @@ export class GameScene extends Phaser.Scene {
     // 3. Build level map
     this.currentLevel = this.allLevels[this.currentLevelIndex];
     this.buildMapFromDefinition(this.currentLevel);
+    this.navigation = new NavigationService(this.currentLevel.tileMap, { tileSize: 32 });
+    this.progression = new ProgressionService();
 
     // 4. Create Player
     const spawn = this.findSpawnPoint(this.currentLevel);
@@ -211,6 +218,18 @@ export class GameScene extends Phaser.Scene {
       const halo = new Item(this, x, y, 'item_halo', 'item_halo');
       this.items.add(halo);
     });
+    this.events.off('enemyDefeated');
+    this.events.on('enemyDefeated', (defeat: EnemyDefeatProgress) => {
+      const update = this.progression.recordEnemyDefeat(defeat);
+      this.player.addHalos(update.currencyAwarded);
+      if (update.levelsGained > 0) {
+        this.levelBannerText.setText('NÍVEL ' + update.currentLevel + '!  +' + update.skillPointsAwarded + ' PONTO DE HABILIDADE');
+        this.levelBannerText.setVisible(true);
+        this.time.delayedCall(1500, () => {
+          if (!this.levelClearedBannerShowing) this.levelBannerText.setVisible(false);
+        });
+      }
+    });
     this.events.off('enemyMeleeStrike');
     this.events.off('playerSummon');
     this.events.off('enemyShockwave');
@@ -269,6 +288,7 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.items, (_playerObj, itemObj) => {
       const itm = itemObj as Item;
       this.simulationBridge.recordItem(itm.itemType);
+      this.progression.recordItemCollected(itm.itemType);
       if (itm.itemType === 'item_halo') {
         this.player.addHalos(100);
       } else if (itm.itemType === 'item_potion') {
@@ -380,6 +400,7 @@ export class GameScene extends Phaser.Scene {
     const appliedDamage = Math.max(0, healthBeforeDamage - this.player.hp);
     if (appliedDamage > 0) {
       this.simulationBridge.recordDamage(appliedDamage);
+      this.progression.recordDamageTaken(appliedDamage);
     }
     this.playerDamageCooldown = 500;
     if (this.player.hp <= 0 && !this.isTransitioning) {
@@ -397,11 +418,14 @@ export class GameScene extends Phaser.Scene {
     const damageType: DamageType = forcedType ?? (
       classId === 'mage' ? 'arcane' : classId === 'rogue' ? 'shadow' : 'physical'
     );
-    return this.combatBridge.calculatePlayerDamage(
-      baseAmount,
+    const progressionMultiplier = this.progression.snapshot().modifiers.damageMultiplier;
+    const damage = this.combatBridge.calculatePlayerDamage(
+      baseAmount * progressionMultiplier,
       damageType,
       this.comboManager.getDamageMultiplier(),
     );
+    this.progression.recordDamageDealt(damage);
+    return damage;
   }
 
   /** Find tile value 8 (spawn point) in the level map */
@@ -448,15 +472,20 @@ export class GameScene extends Phaser.Scene {
   private spawnSingleEnemy(e: EnemyPlacement): void {
     const px = e.x * 32 + 16;
     const py = e.y * 32 + 16;
+    let enemy: Enemy;
     if (e.type === 'ranged' || e.type === 'applaud') {
-      this.enemies.add(new RangedEnemy(this, px, py, this.enemyBullets));
+      enemy = new RangedEnemy(this, px, py, this.enemyBullets);
     } else if (e.type === 'boss' || e.type === 'fortitudo') {
-      this.enemies.add(new BossEnemy(this, px, py, 'Fortitudo'));
+      enemy = new BossEnemy(this, px, py, 'Fortitudo');
     } else if (e.type === 'miniboss') {
-      this.enemies.add(new BossEnemy(this, px, py, 'Sevido', 'boss_guardian_anim', 700, 0.6));
+      enemy = new BossEnemy(this, px, py, 'Sevido', 'boss_guardian_anim', 700, 0.6);
     } else {
-      this.enemies.add(new Enemy(this, px, py, 'enemy_melee_anim'));
+      enemy = new Enemy(this, px, py, 'enemy_melee_anim');
     }
+    const patrol = (e.patrol ?? []).map((point) => ({ x: point.x * 32 + 16, y: point.y * 32 + 16 }));
+    enemy.configureAI(this.navigation, patrol);
+    enemy.configureProgression(Math.max(e.level, this.currentLevel.difficulty));
+    this.enemies.add(enemy);
   }
 
   private spawnWave(index: number): void {
@@ -513,7 +542,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createHUD(): void {
-    const hudBg = this.add.rectangle(640, 25, 1280, 50, 0x05020a, 0.85);
+    const hudBg = this.add.rectangle(640, 34, 1280, 68, 0x05020a, 0.85);
     hudBg.setScrollFactor(0);
     hudBg.setDepth(950);
 
@@ -536,6 +565,13 @@ export class GameScene extends Phaser.Scene {
       fontSize: '18px',
       color: '#ffd700',
       fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(960);
+
+    this.progressionHudText = this.add.text(20, 50, 'NÍVEL 1  XP 0/0', {
+      fontFamily: 'Courier, monospace',
+      fontSize: '13px',
+      color: '#66ffd8',
+      fontStyle: 'bold',
     }).setScrollFactor(0).setDepth(960);
 
     this.weaponHudText = this.add.text(650, 15, "CLASSE: CAVALEIRO", {
@@ -628,6 +664,7 @@ export class GameScene extends Phaser.Scene {
       this.summons = [];
 
       this.buildMapFromDefinition(this.currentLevel);
+      this.navigation = new NavigationService(this.currentLevel.tileMap, { tileSize: 32 });
       this.spawnEnemiesAndItems(this.currentLevel);
       this.spawnWave(0);
 
@@ -655,6 +692,12 @@ export class GameScene extends Phaser.Scene {
   public advanceToNextLevel(): void {
     if (this.isTransitioning) return;
     this.isTransitioning = true;
+    const stageReward = this.progression.recordStageCompleted({
+      stageId: this.currentLevel.id,
+      difficulty: this.currentLevel.difficulty,
+      parSeconds: this.currentLevel.parTime,
+    });
+    this.player.addHalos(stageReward.currencyAwarded);
 
     if (this.currentLevelIndex === this.allLevels.length - 1) {
       this.levelBannerText.setText('PASSAGEM CONCLUÍDA!');
@@ -689,6 +732,7 @@ export class GameScene extends Phaser.Scene {
 
       // Rebuild map
       this.buildMapFromDefinition(this.currentLevel);
+      this.navigation = new NavigationService(this.currentLevel.tileMap, { tileSize: 32 });
       this.spawnEnemiesAndItems(this.currentLevel);
       this.spawnWave(0);
 
@@ -770,8 +814,12 @@ export class GameScene extends Phaser.Scene {
     this.witchTimeOverlay.setVisible(this.player.isWitchTimeActive);
 
     const activeEnemies = this.enemies.getChildren().filter(e => e.active);
-    activeEnemies.forEach(e => {
-      const enemy = e as Enemy;
+    activeEnemies.forEach((entry, index) => {
+      const enemy = entry as Enemy;
+      const neighbors = activeEnemies
+        .filter((_, candidateIndex) => candidateIndex !== index)
+        .map(candidate => ({ x: (candidate as Enemy).x, y: (candidate as Enemy).y }));
+      enemy.setCrowdNeighbors(neighbors);
       enemy.updateEnemy(this.player.x, this.player.y, delta * witchMultiplier, witchMultiplier);
     });
 
@@ -831,6 +879,11 @@ export class GameScene extends Phaser.Scene {
     this.hpHudText.setText('♥'.repeat(this.player.hp) + '♡'.repeat(this.player.maxHp - this.player.hp));
     this.magicHudText.setText(`MAGIA: ${Math.round(this.player.magic)}/${this.player.maxMagic}`);
     this.haloHudText.setText(`HALOS: ${this.player.halos} ⏣`);
+    const levelProgress = this.progression.levelProgress();
+    const progressionSnapshot = this.progression.snapshot();
+    this.progressionHudText.setText(
+      `NÍVEL ${levelProgress.level}  XP ${levelProgress.current}/${levelProgress.required}  SP ${progressionSnapshot.skillPoints}`,
+    );
     this.weaponHudText.setText(`${this.player.heroClass.name}: ${this.player.heroClass.weaponName}`);
     if (this.player.shieldCharges > 0) {
       this.weaponHudText.setText(`${this.player.heroClass.name}: ${this.player.heroClass.weaponName}  ESCUDO x${this.player.shieldCharges}`);

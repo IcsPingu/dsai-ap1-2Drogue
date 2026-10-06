@@ -1,6 +1,6 @@
 # Combate, coletas e bestiário *(2026-10-06)*
 
-> Substitui as regras de entrada de ataque da spec `2026-09-30-combate-jogabilidade.md`, a apresentação das coletas de vida em `2026-10-01-fases-loja-audio.md` e a apresentação dos monstros em `2026-10-03-catalogo-conteudo.md`.
+> Substitui as regras de entrada de ataque da spec `2026-09-30-combate-jogabilidade.md`, a apresentação das coletas de vida em `2026-10-01-fases-loja-audio.md`, a apresentação dos monstros em `2026-10-03-catalogo-conteudo.md` e a volta à primeira fase após a morte em `2026-10-05-progressao-fases-recursos.md`.
 
 ## O quê e por quê
 
@@ -9,7 +9,8 @@ O início de cada fase precisa dar tempo para o jogador reconhecer a sala antes 
 ## Critérios de aceitação
 
 - o jogador fica invencível durante os primeiros 5 segundos de cada fase e após reiniciar uma partida
-- a invencibilidade inicial impede todo dano, sem impedir movimento ou ataques, e possui feedback visual
+- a invencibilidade inicial impede todo dano, sem impedir movimento ou ataques, e possui feedback exclusivamente visual, sem contagem no HUD
+- morrer reinicia a mesma fase em que o jogador morreu, com vida e magia completas e moedas preservadas
 - botão esquerdo executa somente o ataque primário da classe
 - botão direito executa somente a ultimate da classe, desde que haja mana suficiente
 - a ultimate desconta mana e é executada uma única vez por clique direito

@@ -1,0 +1,246 @@
+Vamos ajustar algumas coisas tais quais 5 segundos de invencibilidade, pq se nao, ja nasço tomando porrada, alem disso, ao inves da bolinha verde, bote coração, pra eu pegar, e tambem, quando eu mato tem uma chance de dropar um coracao, chance aleatoria, alem disso, a ultimate tem que ficar no botao direito, os ataques no esquerdo, alem disso, no mago/maga, se eu ficar clicando, ela taca os poderzinhos, se eu segurar o botao esquerdo do mouse, ate acabar a mana, a mesma coisa com o paladino, quanto mais eu segurar mais longe vai a faca, alem disso no catalogo tem que catalogar os monstrons, em pt br, as sprites que tem dos monstros estao iguais, entao o user vai ficar, ue, que diabo é isso, seria interessante se cada um tivesse uma cor tlgd
+
+
+
+
+
+Mostrar mais
+
+14:43
+
+
+
+
+
+
+Trabalhou por 10m 10s
+
+
+
+mostra a contagem no HUD nao precisa mostrar a contagem, alem disso, quando eu morrer numa fase, ele volta na mesma fase tlgd
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Implementado e commitado atomicamente em português.
+- 5 segundos de invencibilidade ao nascer, reiniciar e trocar de fase.
+- Proteção indicada apenas visualmente, sem contador no HUD.
+- Morte reinicia a fase atual, preservando moedas.
+- Coletas de vida agora são corações e recuperam um coração.
+- Inimigos possuem 25% de chance de derrubar coração.
+- Botão esquerdo: ataque primário.
+- Botão direito: ultimate.
+- Maga dispara continuamente ao segurar, gastando 4 de mana por projétil.
+- Ladino aumenta o alcance da faca ao carregar.
+- Bestiário traduzido para PT-BR.
+- Afinidade, Aplauso e Fortitudo possuem cores diferentes no catálogo e na partida.
+- Nova spec registrada antes das implementações.
+Validação:
+- npm run build: passou.
+- 14 suítes passaram.
+- 514 testes passaram.
+- Worktree limpo.
+A alteração da faca foi aplicada ao Ladino, que é a classe de adagas existente. O histórico remoto ainda não foi atualizado.
+
+  Editou 14 arquivos+532-200Visualizar alteraçõesDesfazerVisualizar alterações
+
+SPEC/2026-10-06-combate-coletas-bestiario.mdSPEC/2026-10-06-combate-coletas-bestiario.md+30-0
+SPEC/README.mdSPEC/README.md+2-1
+src/entities/Hero.tssrc/entities/Hero.ts+112-104
+Mostrar mais 11 arquivos
+
+
+
+
+14:53
+
+
+
+
+
+
+
+verifique se nos outros personagens nao tem isso
+
+
+
+
+
+
+
+segunda-feira, 16:31
+
+
+
+
+
+
+Trabalhou por 3m 23s
+
+
+
+Verifiquei os 8 personagens, totalizando 32 quadros de caminhada.
+- Nenhum outro tinha um fragmento visível como o da cavaleira.
+- Encontrei resíduos quase transparentes nas bordas de 7 sprites e removi preventivamente.
+- A arqueira já estava limpa.
+- Animações de ataque e dano não foram alteradas.
+- Todas as folhas permanecem em 512×342.
+Arquivos corrigidos em [animations](C:/Users/David/Documents/GitHub/metrobel/dsai-ap1-2Drogue/src/assets/animations).
+Validação:
+- Build passou.
+- 150 testes passaram.
+- git diff --check passou.
+- Nenhum arquivo temporário ficou no projeto.
+Use Ctrl + F5 no navegador para ignorar sprites antigos armazenados no cache.
+
+
+segunda-feira, 16:34
+
+
+
+
+
+
+
+
+ainda tem pixels bugados, na cavaleira quando eu bato, aparece alguns pixels que nao deveriam aparecer, alem disso  verifique todos os outros personagens 
+
+
+
+
+
+
+
+segunda-feira, 16:39
+
+
+
+
+
+
+Trabalhou por 6m 32s
+
+
+
+Corrigido nos oito personagens.
+- Auditei 96 quadros: caminhada, ataque e dano.
+- Removi fragmentos de espada, capa, magia, botas e flechas que vazavam entre células.
+- A cavaleira ficou limpa durante todos os golpes.
+- Os quadros de caminhada permaneceram idênticos.
+- Mantive armas e efeitos que realmente pertencem às poses.
+- Ativei os novos sprites walk_v5 no [BootScene.ts (line 22)](C:/Users/David/Documents/GitHub/metrobel/dsai-ap1-2Drogue/src/scenes/BootScene.ts:22).
+- Sprites finais em [animations](C:/Users/David/Documents/GitHub/metrobel/dsai-ap1-2Drogue/src/assets/animations).
+A correção foi feita por inspeção visual ampliada e limpeza precisa da transparência, sem redesenhar os personagens.
+Validação:
+- npm run build: passou.
+- npm test -- --runInBand: 150 testes passaram.
+- Commit atômico em português: d74e8af fix: corrige os quadros de animação dos heróis.
+Outras alterações pendentes no repositório não foram incluídas no commit.
+
+  Editado BootScene.ts+1-1Visualizar alteraçõesDesfazerVisualizar alterações
+
+
+
+
+
+segunda-feira, 16:46
+
+
+
+
+
+
+
+
+escreva todos os commits em portugues de tudo que fizemos atomicamente, entao cada commit é uma modificacao
+
+
+
+
+
+
+
+segunda-feira, 16:48
+
+
+
+
+
+
+Vou organizar tudo que ainda está pendente em commits pequenos, cada um representando uma única modificação lógica, com título e descrição em português. Primeiro vou separar cuidadosamente as alterações por subsistema para não misturar combate, geração procedural, simulação, testes e correções visuais — e não vou incluir arquivos sem relação no commit errado.
+
+
+
+
+Executou comandos
+
+
+
+A separação ficou clara. Há três blocos grandes independentes — simulação, geração procedural e combate — cada um com seu gerador e seus testes. Depois deles, vou separar as mudanças de jogabilidade em commits próprios: caminhada, reinicialização de recursos, integração dos núcleos e liberação do túnel. Os dois commits grandes antigos em inglês já estão publicados em origin/main; não vou reescrever esse histórico remoto sem uma ordem explícita de force push, mas todos os commits novos serão integralmente em português.
+
+
+
+
+Executou comandos
+
+
+
+Os três núcleos já estão separados em commits próprios. Agora restaram apenas três arquivos misturando pequenas correções; vou usar seleção por trecho para manter caminhada, recursos de fase, integração e túnel em commits diferentes, sem alterar o conteúdo final dos arquivos.
+
+
+
+
+Editou arquivos e executou comandos
+
+
+
+A caminhada e a restauração de recursos já estão em commits separados. Falta somente GameScene.ts; vou dividi-lo em três commits: integração dos novos núcleos, correção da reconstrução da fase seguinte e aparecimento do túnel somente após a última onda. 
+
+
+
+que armas sao essas que sao todas iguais
+
+
+
+
+
+
+
+14:55
+
+
+
+
+
+
+Trabalhou por 3m 47s
+
+
+
+Corrigido. Todas estavam usando item_halo, por isso pareciam moedas iguais.
+Agora o catálogo possui ícones próprios:
+- Scarborough Fair: duas pistolas.
+- Shuraba: katana.
+- Kulshedra: chicote.
+- Durga: garras de fogo e gelo.
+- Kilgore: lança-foguetes.
+Também traduzi títulos, categorias, descrições e histórias para PT-BR.
+Commits:
+- 818223c — spec anterior ao código.
+- 2399255 — implementação dos ícones e traduções.
+Validação:
+- Build passou.
+- 15 suítes passaram.
+- 518 testes passaram.
+- Worktree limpo.

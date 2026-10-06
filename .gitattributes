@@ -1,0 +1,9 @@
+# Exportações brutas devem manter os bytes e as quebras de linha originais.
+prompts/sessoes/*.jsonl -text
+prompts/sessoes/*.txt -text
+prompts/sessoes/*.gz binary
+
+# Documentação e scripts usam UTF-8 com LF em qualquer plataforma.
+prompts/*.md text eol=lf
+prompts/sessoes/*.md text eol=lf
+scripts/*.ps1 text eol=lf

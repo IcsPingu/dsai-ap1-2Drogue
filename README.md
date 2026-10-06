@@ -17,20 +17,6 @@ Ritmo de desenvolvimento declarado pela dupla: **4 horas por dia**.
 
 A publicação da `main` é automatizada pelo workflow [Publicar jogo no GitHub Pages](./.github/workflows/publicar-pages.yml).
 
-## Checklist de entrega
-
-- [x] URL pública clicável no `README.md`
-- [x] uma spec datada por parte do sistema, indexada em [`SPEC/`](./SPEC/README.md)
-- [x] specs commitadas antes das implementações correspondentes
-- [x] exportações brutas preservadas em [`prompts/sessoes/`](./prompts/sessoes/MANIFESTO.md)
-- [x] integrantes e perfis do GitHub identificados
-- [x] ferramenta, modelo e esforço de raciocínio documentados
-- [x] commits desta etapa com os trailers `Agent:` e `Spec:`
-- [x] saída reproduzível do `cloc` acima de 100 mil linhas
-- [x] auditoria automática sem segredos conhecidos ou `.env` versionado
-
-Os trailers tornaram-se obrigatórios a partir da spec de entrega. O histórico anterior contém commits sem trailers e não será novamente reescrito para adicioná-los retroativamente.
-
 ## Ferramentas e modelo
 
 | Finalidade | Ferramenta | Modelo ou versão |

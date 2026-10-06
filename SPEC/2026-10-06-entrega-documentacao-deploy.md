@@ -10,8 +10,11 @@ O projeto precisa apresentar, na raiz do repositório, evidências verificáveis
 - a URL pública responde com sucesso depois da publicação
 - o projeto possui publicação automatizada da pasta `dist` no GitHub Pages
 - o `README.md` lista a ferramenta de IA, o modelo e o nível de raciocínio usados
+- o `README.md` identifica os dois integrantes e seus perfis do GitHub
 - o `README.md` reproduz o comando oficial do `cloc` e sua saída completa
+- o `README.md` separa as linhas dos testes das demais linhas de código
 - a saída registrada do `cloc` possui pelo menos 100 mil linhas de código, sem contar dependências, builds, prompts, Markdown, JSON, YAML, CSV, texto, SVG, locks ou arquivos minificados
+- o `README.md` resume, para a apresentação, as quantidades de specs, prompts, sessões, suítes, testes e o ritmo de horas declarado pela dupla
 - o `README.md` aponta para o índice das specs e para `prompts/sessoes/`
 - as sessões brutas permanecem preservadas, com arquivos grandes compactados em gzip e hashes documentados
 - cada commit produzido a partir desta spec contém os trailers `Agent:` e `Spec:`

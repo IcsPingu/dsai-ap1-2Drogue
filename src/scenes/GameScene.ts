@@ -29,6 +29,8 @@ interface GameSceneInitData {
   skipControls?: boolean;
   proceduralSeed?: string | number;
   proceduralPresets?: PresetId[];
+  levelIndex?: number;
+  halos?: number;
 }
 
 const DEFAULT_PROCEDURAL_RUN: readonly PresetId[] = [
@@ -101,6 +103,9 @@ export class GameScene extends Phaser.Scene {
   private combatBridge!: GameCombatBridge;
   private navigation!: NavigationService;
   private progression!: ProgressionService;
+  private proceduralSeed?: string | number;
+  private proceduralPresets?: PresetId[];
+  private startingHalos = 5000;
 
   constructor() {
     super('GameScene');
@@ -110,8 +115,9 @@ export class GameScene extends Phaser.Scene {
     // Phaser keeps the Scene instance on restart, so explicitly reset every
     // run-scoped guard that could otherwise leave update() permanently locked.
     this.configureLevelRun(data);
-    this.currentLevelIndex = 0;
-    this.currentLevel = this.allLevels[0];
+    this.currentLevelIndex = Phaser.Math.Clamp(data?.levelIndex ?? 0, 0, this.allLevels.length - 1);
+    this.currentLevel = this.allLevels[this.currentLevelIndex];
+    this.startingHalos = Math.max(0, Math.floor(data?.halos ?? 5000));
     this.isTransitioning = false;
     this.levelClearedBannerShowing = false;
     this.controlsGuideOpen = false;
@@ -130,10 +136,14 @@ export class GameScene extends Phaser.Scene {
     const querySeed = query?.get('procedural');
     const requestedSeed = data?.proceduralSeed ?? (querySeed && querySeed !== '0' ? querySeed : undefined);
     if (requestedSeed === undefined) {
+      this.proceduralSeed = undefined;
+      this.proceduralPresets = undefined;
       this.allLevels = VERSE_SECTIONS;
       return;
     }
     const presets = data?.proceduralPresets?.length ? data.proceduralPresets : [...DEFAULT_PROCEDURAL_RUN];
+    this.proceduralSeed = requestedSeed;
+    this.proceduralPresets = [...presets];
     this.allLevels = new ProceduralLevelFactory().createRun(requestedSeed, presets);
   }
 
@@ -161,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     const appearance = loadAppearance();
     const heroClass = getPlayerClass(appearance.classId);
     this.player = new Player(this, spawn.x, spawn.y, getCharacterAnimationKey(appearance), heroClass);
+    this.player.halos = this.startingHalos;
     this.player.bulletGroup = this.bullets;
     this.simulationBridge = new GameSimulationBridge({
       classId: appearance.classId,
@@ -423,7 +434,13 @@ export class GameScene extends Phaser.Scene {
       this.player.setActive(false);
       this.levelBannerText.setText('GAME OVER');
       this.levelBannerText.setVisible(true);
-      this.time.delayedCall(1500, () => this.scene.restart({ skipControls: true }));
+      this.time.delayedCall(1500, () => this.scene.restart({
+        skipControls: true,
+        levelIndex: this.currentLevelIndex,
+        halos: this.player.halos,
+        proceduralSeed: this.proceduralSeed,
+        proceduralPresets: this.proceduralPresets,
+      }));
     }
   }
 

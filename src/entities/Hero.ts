@@ -182,7 +182,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     if (this.comboSequence.length > 0) {
       this.comboTimer += delta;
-      if (this.comboTimer > 1500) {
+      if (this.comboTimer > 2600) {
         this.comboSequence = [];
         this.comboTimer = 0;
         this.comboWindowStart = null;
@@ -305,7 +305,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Combo sequence expires: finishers must be executed within a tight window
     if (this.comboSequence.length > 0 && this.comboWindowStart !== null &&
-        this.scene.time.now - this.comboWindowStart > 1500) {
+        this.scene.time.now - this.comboWindowStart > 2600) {
       this.comboSequence = [];
       this.comboWindowStart = null;
     }
@@ -316,22 +316,41 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.comboSequence.push(input);
     this.comboTimer = 0;
 
-    // Witch Combo finisher: last three inputs match a known pattern within the window
+    // Combo finishers: last three/four inputs match a known pattern within the window
     const seqStr = this.comboSequence.join('');
     const last3 = seqStr.slice(-3);
+    const last4 = seqStr.slice(-4);
     const WITCH_COMBOS = ['PPK', 'KPK', 'PKP', 'KKP', 'PKK'];
+
+    // Empowered summon finisher: four punches
+    if (this.comboSequence.length >= 4 && last4 === 'PPPP') {
+      this.comboSequence = [];
+      this.comboWindowStart = null;
+      this.comboInputLock = 620;
+      if (this.magic >= this.heroClass.magicCost) {
+        this.magic -= this.heroClass.magicCost;
+        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id, 'empowered');
+      }
+      SoundManager.playWickedWeave();
+      this.spawnSpecialRing(this.heroClass.accentColor);
+      this.performPrimaryAttack(0, false, false);
+      return;
+    }
+
+    // Witch Combo finisher: last three inputs match a known pattern within the window
     if (this.comboSequence.length >= 3 && WITCH_COMBOS.includes(last3)) {
       this.comboSequence = [];
       this.comboWindowStart = null;
       this.comboInputLock = 620;
-      // Summon burst replaces the old AoE burst as the combo ender
       if (this.magic >= this.heroClass.magicCost) {
         this.magic -= this.heroClass.magicCost;
-        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id);
+        this.scene.events.emit('playerSummon', this.x, this.y, this.heroClass.id, 'normal');
       }
       SoundManager.playWickedWeave();
       this.spawnSpecialRing(this.heroClass.accentColor);
-      this.playSpriteAction('attack');
+      // The finisher hit still goes out — it is not a cancel
+      if (input === 'K') this.performPrimaryAttack(0, false, true);
+      else this.performPrimaryAttack(charge, throwDagger, false);
       return;
     }
 
@@ -557,6 +576,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private spawnSpecialRing(color: number): void {
     const ring = this.scene.add.circle(this.x, this.y, 24, color, 0.2).setStrokeStyle(5, color, 0.9).setDepth(11);
     this.scene.tweens.add({ targets: ring, alpha: 0, scaleX: 5, scaleY: 5, duration: 450, onComplete: () => ring.destroy() });
+  }
+
+  /** Called by ComboManager whenever one of the player's hits connects. */
+  public extendComboWindow(): void {
+    this.comboWindowStart = this.scene.time.now;
+    this.comboTimer = 0;
   }
 
   public getMeleeDamage(): number {

@@ -10,12 +10,14 @@ export class ComboManager {
   private comboText: Phaser.GameObjects.Text;
   private comboCount: number = 0;
   private lastHitTime: number = 0;
-  private timeoutMs: number = 1200;
+  private timeoutMs: number = 3600;
   private readonly rankNames = ['D', 'C', 'B', 'A', 'S', 'SS'];
+  private onHitCallback?: () => void;
 
-  constructor(scene: Phaser.Scene, comboText: Phaser.GameObjects.Text) {
+  constructor(scene: Phaser.Scene, comboText: Phaser.GameObjects.Text, onHit?: () => void) {
     this.scene = scene;
     this.comboText = comboText;
+    this.onHitCallback = onHit;
     this.updateUI();
   }
 
@@ -23,6 +25,7 @@ export class ComboManager {
   public registerHit(): void {
     this.comboCount += 1;
     this.lastHitTime = this.scene.time.now;
+    this.onHitCallback?.();
     this.updateUI();
   }
 
@@ -41,6 +44,11 @@ export class ComboManager {
 
   public getComboCount(): number {
     return this.comboCount;
+  }
+
+  /** Every connected hit refreshes the chain window so finishers stay reachable. */
+  public extendComboWindow(): void {
+    this.lastHitTime = this.scene.time.now;
   }
 
   private getLevel(): number {

@@ -56,7 +56,9 @@ export class CatalogScene extends Phaser.Scene {
 
   private getEntries(): CatalogEntry[] {
     if (this.tab === 'mobs') {
-      return ALL_ENEMIES.map((e: EnemyDefinition) => ({
+      // Only enemies with a runtime class are shown — the catalogue should be truthful
+      const IMPLEMENTED_IDS = new Set(['affinity', 'applaud', 'fortitudo']);
+      return ALL_ENEMIES.filter(e => IMPLEMENTED_IDS.has(e.id)).map((e: EnemyDefinition) => ({
         name: e.name,
         subtitle: e.title,
         description: e.description,

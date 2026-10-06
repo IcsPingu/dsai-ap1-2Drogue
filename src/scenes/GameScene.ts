@@ -11,8 +11,8 @@ import { RangedEnemy } from '../entities/RangedEnemy';
 import { Item } from '../entities/Item';
 import { TextureGenerator } from '../utils/TextureGenerator';
 import { LevelDefinition, EnemyPlacement } from '../data/LevelData';
-import { CORRIDOR_LEVEL } from '../data/CorridorLevelData';
 import { VERSE_SECTIONS } from '../data/VerseLevelData';
+import { ALL_LEVELS } from '../data/LevelData';
 import { loadAppearance, loadSettings } from '../data/PlayerProfile';
 import { getCharacterAnimationKey } from '../utils/CharacterTexture';
 import { ShopUI } from '../ui/ShopUI';
@@ -55,7 +55,7 @@ export class GameScene extends Phaser.Scene {
   // Floor tile images (so we can destroy them on level transition)
   private floorImages: Phaser.GameObjects.Image[] = [];
 
-  private allLevels: LevelDefinition[] = VERSE_SECTIONS;
+  private allLevels: LevelDefinition[] = [...VERSE_SECTIONS, ...ALL_LEVELS];
   private currentLevelIndex: number = 0;
   private currentLevel: LevelDefinition = VERSE_SECTIONS[0];
   private foundKeys = new Set<string>();
@@ -204,7 +204,7 @@ export class GameScene extends Phaser.Scene {
 
     // 9. HUD & Chapter Title
     this.createHUD();
-    this.comboManager = new ComboManager(this, this.comboHudText);
+    this.comboManager = new ComboManager(this, this.comboHudText, () => this.player.extendComboWindow());
     this.spawnWave(0);
     this.events.off('enemyDropHalo');
     this.events.on('enemyDropHalo', (x: number, y: number) => {
@@ -227,7 +227,7 @@ export class GameScene extends Phaser.Scene {
     this.events.on('enemyMeleeStrike', (dmg: number) => {
       if (this.playerDamageCooldown <= 0 || this.player.isDodging) this.damagePlayer(dmg);
     });
-    this.events.on('playerSummon', (x: number, y: number, classId: string) => this.spawnSummon(x, y, classId));
+    this.events.on('playerSummon', (x: number, y: number, classId: string, variant?: string) => this.spawnSummon(x, y, classId, variant));
     this.events.on('enemyShockwave', (x: number, y: number, dmg: number) => {
       if (Phaser.Math.Distance.Between(this.player.x, this.player.y, x, y) < 95) {
         this.damagePlayer(dmg);
@@ -299,16 +299,18 @@ export class GameScene extends Phaser.Scene {
         }
         return;
       }
-      const door = doorObj as Phaser.Physics.Arcade.Sprite;
-      const exit = this.currentLevel.exits?.find(e =>
-        Math.abs(e.x * 32 + 16 - door.x) < 24 && Math.abs(e.y * 32 + 16 - door.y) < 24);
-      if (exit) {
-        this.transitionToSection(exit);
-      } else if (!this.currentLevel.exits?.length) {
-        // Procedural floors use their generated exit tile as a one-way stair,
-        // rather than the bidirectional section-door table of authored maps.
-        this.advanceToNextLevel();
+      // Stairs/doors act as the level portal — only open once the section is cleared
+      const wavesCleared = this.currentWaveIndex >= this.waves.length - 1 && this.enemies.countActive(true) === 0 && !this.waveTransition;
+      if (!wavesCleared) {
+        if (!this.doorSealNotice || this.time.now - this.doorSealNotice > 2000) {
+          this.doorSealNotice = this.time.now;
+          this.levelBannerText.setText('PORTAL BLOQUEADO! Elimine a horda.');
+          this.levelBannerText.setVisible(true);
+          this.time.delayedCall(1200, () => this.levelBannerText.setVisible(false));
+        }
+        return;
       }
+      this.advanceToNextLevel();
     });
 
     // Bullets vs Enemies → ranged damage
@@ -346,7 +348,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private spawnSummon(x: number, y: number, classId: string): void {
+  private spawnSummon(x: number, y: number, classId: string, variant?: string): void {
     const configs: Record<string, SummonConfig> = {
       // One single big extending sword wave per summon — re-do PPK for another
       knight: { tint: 0xf5cf5b, damage: 40, attackCooldown: 900, duration: 1100, projectileTexture: 'proj_sword_wave', volleySize: 1, spread: 0, projectileScale: 2.4, piercing: 4 },
@@ -357,7 +359,15 @@ export class GameScene extends Phaser.Scene {
       // Shadow clone: short-lived, strikes twice with fast daggers
       rogue: { tint: 0xe84f75, damage: 16, attackCooldown: 420, duration: 700, projectileTexture: 'proj_rogue_dagger', volleySize: 2, spread: 0.2, projectileScale: 1.1 },
     };
-    const config = configs[classId] ?? configs.knight;
+    const config = { ...(configs[classId] ?? configs.knight) };
+    // 'empowered' (PPPP) makes a stronger, bigger, longer summon
+    if (variant === 'empowered') {
+      config.damage = Math.round(config.damage * 1.7);
+      config.aoeDamage = config.aoeDamage ? Math.round(config.aoeDamage * 1.7) : undefined;
+      config.projectileScale = (config.projectileScale ?? 1) * 1.3;
+      config.duration = Math.round(config.duration * 1.5);
+      config.tint = 0xffffff;
+    }
     // Only one summon at a time — a new finisher replaces the old one
     this.summons.forEach(s => s.destroy());
     this.summons = [];
@@ -472,8 +482,8 @@ export class GameScene extends Phaser.Scene {
     } else {
       const sorted = [...level.enemies].sort((a, b) => a.level - b.level);
       this.waves = [];
-      for (let i = 0; i < sorted.length; i += 5) {
-        this.waves.push({ enemies: sorted.slice(i, i + 5) });
+      for (let i = 0; i < sorted.length; i += 8) {
+        this.waves.push({ enemies: sorted.slice(i, i + 8) });
       }
       const minibossSpots = [{ x: 25, y: 8 }, { x: 30, y: 9 }, { x: 34, y: 9 }];
       const mb = minibossSpots[this.currentLevelIndex] ?? { x: 20, y: 8 };

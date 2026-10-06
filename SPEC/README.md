@@ -36,3 +36,4 @@ Cada arquivo descreve uma parte do sistema antes do código correspondente entra
 | 2026-10-06 | [Cenários de simulação e qualidade](./2026-10-06-cenarios-simulacao-qualidade.md) |
 | 2026-10-06 | [Integração dos sistemas](./2026-10-06-integracao-sistemas.md) |
 | 2026-10-06 | [Combate, coletas e bestiário](./2026-10-06-combate-coletas-bestiario.md) |
+| 2026-10-06 | [Armas do catálogo](./2026-10-06-armas-catalogo.md) |
